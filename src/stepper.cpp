@@ -64,7 +64,7 @@ void Stepper::setMaxSpeed(float speed)
     if (_maxSpeed != speed)
     {
         _maxSpeed = speed;
-        _cmin = 1000000.0 / speed;
+        //_cmin = 1000000.0 / speed;
         
 
         cli();
@@ -108,7 +108,7 @@ void Stepper::stop()
     }
 }
 
-void Stepper::computeNewSpeed()
+/*void Stepper::computeNewSpeed()
 {
     int32_t distanceTo = distanceToGo(); // +ve is clockwise from curent location
 
@@ -185,5 +185,47 @@ void Stepper::computeNewSpeed()
 
     //if (_direction == DIRECTION_CCW)
 	//   _speed = -_speed;
+}
+    */
+
+void Stepper::computeNewSpeed()  
+{
+    long dist = distanceToGo();
+    double d = abs(dist);
+
+    if (dist == 0 && fabs(_speed) < 1e-6) {
+        _stepInterval = 0;
+        _speed = 0;
+        _n = 0;
+        return;
+    }
+
+    int dir = dist > 0 ? 1 : -1;
+
+    // vitesse max possible en fonction du reste (freinage)
+    double v_peak = sqrt(2.0 * _acceleration * d);
+
+    // nouvelle limitation dynamique + freinage
+    double v_target = min(_maxSpeed, v_peak);
+
+    // approche progressive
+    if (_speed * dir < v_target)
+    {
+        _speed += dir * _acceleration * 1.414231 / sqrt(_n + 1);
+    }
+    else if (_speed * dir > v_target)
+    {
+        _speed -= dir * _acceleration * 1.414231 / sqrt(_n + 1);
+    }
+
+    // clamp
+    if (fabs(_speed) > _maxSpeed)
+        _speed = dir * _maxSpeed;
+
+    // intervalle de step (µs)
+    if (_speed != 0)
+        _stepInterval = fabs(1000000.0 / _speed);
+    else
+        _stepInterval = 0;
 }
 
