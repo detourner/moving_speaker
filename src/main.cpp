@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "timer.h"
-#include "digitalWriteFast.h"
+#include "stepper.h"
 /********************************************************************
  * Stepper Trapézoïdal Dynamique — Timer1 + ISR
  * Vitesse max dynamique, accélération constante
@@ -19,7 +19,6 @@ long targetPos = 20000;      // cible à atteindre (pas)
 volatile long position = 0;      // position actuelle en pas
 volatile double v = 0.0;         // vitesse actuelle
 volatile double accSteps = 0.0;  // accumulateur pas fractionnaires
-volatile double v_target = 0.0; // vitesse cible instantanée
 
 // Timer interval
 const double ISR_PERIOD_SEC = 480e-6;   // 50 µs = 20 kHz
@@ -29,120 +28,55 @@ char myData[64]; // buffer pour la trame
 volatile uint16_t a = 0;
 
 CounterA counterA;
+CounterB counterB;
 
-// ----------------- HARDWARE STEP -------------------
-inline void doStepISR(int dir)
-{
-    if (dir > 0) digitalWriteFast(DIR_PIN, HIGH);
-    else         digitalWriteFast(DIR_PIN, LOW);
+Stepper stepperA;
+Stepper stepperB;
 
-    digitalWriteFast(STEP_PIN, HIGH);
-    // très court délai (1–2 cycles)
-    digitalWriteFast(STEP_PIN, LOW);
-}
+uint16_t duration;
 
-
+volatile unsigned long isrDuration = 0;  // en microsecondes
 // ------------------ TRAPÉZOÏDE DYNAMIQUE -------------------
 ISR(TIMER1_COMPA_vect)
 {
-    a++;
-    counterA.Set(120); // 4us x 120 = 480µs
- long dist = targetPos - position;
-    double d = abs(dist);
+  unsigned long start = micros();
+  stepperA.RunISR();
 
-    if (dist == 0 && fabs(v) < 1e-6) {
-        v = 0;
-        accSteps = 0;
-        return;
-    }
+  isrDuration = micros() - start;
 
-    int dir = (dist >= 0 ? 1 : -1);
-
-    // vitesse maximale atteignable
-    double v_peak = sqrt(2.0 * accel * d);
-    double v_target = min(vmax, v_peak);
-
-    // ---- changement de sens ----
-    if (v * dir < 0) {
-        // vitesse opposée → décélération uniquement
-        double dv = accel * ISR_PERIOD_SEC;
-        if (fabs(v) <= dv) {
-            v = 0;
-            accSteps = 0;  // reset accumulateur pour éviter steps fantômes
-        } else {
-            v += (v > 0 ? -dv : dv);  // décélérer vers 0
-        }
-    }
-    else {
-        // approche progressive vers v_target
-        if (fabs(v) < v_target) {
-            v += dir * accel * ISR_PERIOD_SEC;
-            if (fabs(v) > v_target) v = dir * v_target;
-        } else if (fabs(v) > v_target) {
-            v -= dir * accel * ISR_PERIOD_SEC;
-            if (fabs(v) < v_target) v = dir * v_target;
-        }
-
-        // accumulation fractionnaire seulement après vitesse compatible
-        accSteps += v * ISR_PERIOD_SEC;
-
-        // step unique si accumulateur >= 1 ou <= -1
-        if (accSteps >= 1.0 || accSteps <= -1.0) {
-            int stepDir = (accSteps > 0 ? 1 : -1);
-            long nextPos = position + stepDir;
-
-            if ((stepDir > 0 && nextPos >= targetPos) ||
-                (stepDir < 0 && nextPos <= targetPos)) {
-                position = targetPos;
-                accSteps = 0;
-                v = 0;
-            } else {
-                doStepISR(stepDir);
-                position = nextPos;
-                accSteps -= stepDir;
-            }
-        }
-    }
 }
 
-
-// ------------------------ API -------------------------
-void moveTo(long newPos)
+ISR(TIMER1_COMPB_vect)
 {
-    targetPos = newPos;
+  stepperB.RunISR();
 }
 
-void setMaxSpeed(double vm)
-{
-    vmax = vm;
-}
 
-void setAcceleration(double a)
-{
-    accel = a;
-}
+
 
 
 // ------------------------ DEMO ------------------------
 void setup()
 {
-    pinModeFast(STEP_PIN, OUTPUT);
-    pinModeFast(DIR_PIN, OUTPUT);
-
     Serial.begin(115200);
 
     Counter::Setup(C250kHz);
-    counterA.Enable();
-    counterA.Set(10); // 50µs
 
-    //moveTo(20000);
+    stepperA.Setup(STEP_PIN, DIR_PIN, counterA, 480e-6); // 480µs
+    delayMicroseconds(100); // wait a bit to avoid conflict on Timer1 compare A and B
+    stepperB.Setup(STEP_PIN, DIR_PIN, counterB, 480e-6); // 480µs
+
+    stepperA.setMaxSpeed(1500.0);
+    stepperA.setAcceleration(8000.0);
+    stepperA.moveTo(0);
+
+    stepperB.setMaxSpeed(1500.0);
+    stepperB.setAcceleration(8000.0);
+    stepperB.moveTo(0);
 }
 
 void loop()
 {
-
-
-
 
   static long updateSendSerial = 0;
 
@@ -150,12 +84,12 @@ void loop()
   {
     updateSendSerial = millis();
 
-    Serial.print("t:");
-    Serial.print(a);  // 2 décimales
+    Serial.print("I:");
+    Serial.print(isrDuration);
     Serial.print("P:");
-    Serial.print(position);  // 2 décimales
+    Serial.print(stepperA.getPosition());  // 2 décimales
     Serial.print(" v:");
-    Serial.println(v);  
+    Serial.println(stepperA.getSpeed());  
   }
 
   if (Serial.available()) 
@@ -217,8 +151,8 @@ void loop()
       Serial.print(",");      
       Serial.print(Pan_target); // fin de trame avec '\n'
       Serial.println("end");
-      moveTo(Pan_target);
-      setMaxSpeed(Pan_speed);
+      stepperA.moveTo(Pan_target);
+      stepperA.setMaxSpeed(Pan_speed);
     }
   }
 }

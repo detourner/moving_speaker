@@ -7,83 +7,41 @@
 class Stepper 
 {
     protected:
-       
-        typedef enum
-        {
-            DIRECTION_CCW = 0,  ///< Counter-Clockwise
-            DIRECTION_CW  = 1   ///< Clockwise
-        } Direction;
-    
+
     public:
-        void Setup(uint8_t stepPin, uint8_t dirPin, Counter& counter);
-        void DoStep(void);
+        void Setup(uint8_t stepPin, uint8_t dirPin, Counter& counter, double timerPeriodUs);
+        void RunISR(void);
 
-        float maxSpeed() const { return _maxSpeed; }
-        void setMaxSpeed(float speed);
+        void moveTo(long absolute);
+        void setMaxSpeed(double vm);
+        void setAcceleration(double a);
 
-
-
-        float acceleration() const { return _acceleration; }
-        void setAcceleration(float acceleration);
-
-        int32_t distanceToGo() const { return _targetPos - _currentPos; }
-
-        int32_t currentPosition() const { return _currentPos; }
-
-        void moveTo(int32_t absolute);
-        void stop();
-
-        uint16_t debug() const { return _debug; }
-        unsigned long stepInterval() const { return _stepInterval; } 
-        float speed() const { return _speed; }  
+        long getPosition(void) { return _position; }
+        long getSpeed(void) { return _curSpeed; }
+        long getMaxSpeed(void) {return _vmax;}
+        long getAccel(void) { return _accel; }
 
 
     private:
 
-        bool runSpeed();
-        void computeNewSpeed();
-
+       
         uint8_t _stepPin;
         uint8_t _dirPin;
         Counter* _counter;
 
 
-        int32_t _targetPos;
-        int32_t _currentPos;
+      
 
-    /// Current direction motor is spinning in
-    /// Protected because some peoples subclasses need it to be so
-    boolean _direction; // 1 == CW, 0 == CCW
+    volatile long _position = 0;      // position actuelle en pas
+    volatile double _curSpeed = 0.0;         // vitesse actuelle
+    volatile double _accSteps = 0.0;  // accumulateur pas fractionnaires
 
-    /// The current motos speed in steps per second
-    /// Positive is clockwise
-    volatile float          _speed;         // Steps per second
+    double _vmax = 1500.0;        // PAS/S — modifiable à tout moment ➜ dynamique !
+    double _accel = 8000.0;       // PAS/S²
+    long _targetPos = 0;      // cible à atteindre (pas)
 
-    /// The maximum permitted speed in steps per second. Must be > 0.
-    volatile float          _maxSpeed;
-
-    /// The acceleration to use to accelerate or decelerate the motor in steps
-    /// per second per second. Must be > 0
-    volatile float          _acceleration;
-    volatile float          _sqrt_twoa; // Precomputed sqrt(2*_acceleration)
-
-    /// The current interval between steps in microseconds.
-    /// 0 means the motor is currently stopped with _speed == 0
-    volatile unsigned long  _stepInterval;
-
-     /// The step counter for speed calculations
-    volatile long _n;
-
-    /// Initial step size in microseconds
-    volatile float _c0;
-
-    /// Last step size in microseconds
-    volatile float _cn;
-
-    /// Min step size in microseconds based on maxSpeed
-    volatile float _cmin; // at max speed
-
-    volatile uint16_t _debug;
+    double _timerPeriod = 480e-6; // 480us
+    uint16_t _timerSet = 120;
 
 };    
 

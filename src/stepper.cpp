@@ -1,231 +1,118 @@
 #include "stepper.h"
-
 #include "digitalWriteFast.h"
 
-void Stepper::Setup(uint8_t stepPin, uint8_t dirPin, Counter& counter)
+void Stepper::Setup(uint8_t stepPin, uint8_t dirPin, Counter& counter, double timerPeriodSec)
 {
     _stepPin = stepPin;
     _dirPin = dirPin;
     _counter = &counter;
+
+    _timerPeriod = timerPeriodSec;
+
+    // calcul de la valeur à charger dans le compteur pour la période désirée
+    _timerSet =  (_timerPeriod * 1000000.0) / _counter->getTicksPeruSec();
+
+    Serial.print("Timer set to ");
+    Serial.println(_timerSet);
+
+    _counter->Set(_timerSet);
+    _counter->Enable();
+
     pinModeFast(_stepPin, OUTPUT);
     pinModeFast(_dirPin, OUTPUT);
 }
 
-void Stepper::DoStep(void)
+void Stepper::RunISR(void)
 {
-    digitalWriteFast(_dirPin, _direction == DIRECTION_CW );
-    
-    if(_stepInterval != 0)
-    {
-        digitalWriteFast(_stepPin, HIGH);
-
-        if (_direction == DIRECTION_CW)
-        {
-            // Clockwise
-            _currentPos += 1;
-        }
-        else
-        {
-            // Anticlockwise  
-            _currentPos -= 1;
-        }
-
-        computeNewSpeed();
-    
-
-        if(_speed != 0.0 || distanceToGo() != 0)
-        {
-            //_debug = ((float)_stepInterval * (float)Counter::getTicksPerSec() / 1000000.0f);
-            //_counter->Set((float)_stepInterval * (float)Counter::getTicksPerSec() / 1000000.0f);
-            _debug = _stepInterval / Counter::getTicksPeruSec();
-            _counter->Set(_stepInterval / Counter::getTicksPeruSec());
-        }
-        digitalWriteFast(_stepPin, LOW);
-    }
-}
-
-void Stepper::moveTo(int32_t absolute)
-{
-    if (absolute != _targetPos)
-    {
-        _targetPos = absolute;
-        cli();
-        computeNewSpeed();
-        DoStep();
-        sei();
-    }
-}
-
-
-void Stepper::setMaxSpeed(float speed)
-{
-    if (speed < 0.0)
-       speed = -speed;
-    if (_maxSpeed != speed)
-    {
-        _maxSpeed = speed;
-        //_cmin = 1000000.0 / speed;
-        
-
-        cli();
-        computeNewSpeed();
-        DoStep();
-        sei();
-    }
-}
-
-
-
-void Stepper::setAcceleration(float acceleration)
-{
-    if (acceleration == 0.0)
-	    return;
-    if (acceleration < 0.0)
-      acceleration = -acceleration;
-    if (_acceleration != acceleration)
-    {
-        // Recompute _n per Equation 17
-        _n = _n * (_acceleration / acceleration);
-        // New c0 per Equation 7, with correction per Equation 15
-        _c0 = 0.676 * sqrt(2.0 / acceleration) * 1000000.0; // Equation 15
-        _acceleration = acceleration;
-        cli();
-        computeNewSpeed();
-        DoStep();
-        sei();
-    }
-}
-
-void Stepper::stop()
-{
-    if (_speed != 0.0)
-    {    
-	long stepsToStop = (long)((_speed * _speed) / (2.0 * _acceleration)) + 1; // Equation 16 (+integer rounding)
-	if (_speed > 0)
-	    moveTo(_currentPos + stepsToStop);
-	else
-	    moveTo(_currentPos - stepsToStop);
-    }
-}
-
-/*void Stepper::computeNewSpeed()
-{
-    int32_t distanceTo = distanceToGo(); // +ve is clockwise from curent location
-
-    int32_t stepsToStop = (int32_t)((_speed * _speed) / (2.0 * _acceleration)); // Equation 16
-    
-
-    if (distanceTo == 0 && stepsToStop <= 1)
-    {
-        // We are at the target and its time to stop
-        _stepInterval = 0;
-        _speed = 0.0;
-        _n = 0;
-        return;
-    }
-
-    if (distanceTo > 0)
-    {
-        // We are anticlockwise from the target
-        // Need to go clockwise from here, maybe decelerate now
-        if (_n > 0)
-        {
-            // Currently accelerating, need to decel now? Or maybe going the wrong way?
-            if ((stepsToStop >= distanceTo) || _direction == DIRECTION_CCW)
-            _n = -stepsToStop; // Start deceleration
-        }
-        else if (_n < 0)
-        {
-            // Currently decelerating, need to accel again?
-            if ((stepsToStop < distanceTo) && _direction == DIRECTION_CW)
-            _n = -_n; // Start accceleration
-        }
-    }
-    else if (distanceTo < 0)
-    {
-        // We are clockwise from the target
-        // Need to go anticlockwise from here, maybe decelerate
-        if (_n > 0)
-        {
-            // Currently accelerating, need to decel now? Or maybe going the wrong way?
-            if ((stepsToStop >= -distanceTo) || _direction == DIRECTION_CW)
-            _n = -stepsToStop; // Start deceleration
-        }
-        else if (_n < 0)
-        {
-            // Currently decelerating, need to accel again?
-            if ((stepsToStop < -distanceTo) && _direction == DIRECTION_CCW)
-            _n = -_n; // Start accceleration
-        }
-    }
-
-    // Need to accelerate or decelerate
-    if (_n == 0)
-    {
-        // First step from stopped
-        _cn = _c0;
-        _direction = (distanceTo > 0) ? DIRECTION_CW : DIRECTION_CCW;
-    }
-    else
-    {
-        // Subsequent step. Works for accel (n is +_ve) and decel (n is -ve).
-        _cn = _cn - ((2.0 * _cn) / ((4.0 * _n) + 1)); // Equation 13
-        _cn = max(_cn, _cmin); 
-    }
-    _n++;
-    _stepInterval = _cn;
-    _speed = 1000000.0 / _cn;
-
-    if (_speed > _maxSpeed)
-        _speed = _maxSpeed;
-    else if (_speed < _maxSpeed)
-        _n = (long)((_maxSpeed * _maxSpeed) / (2.0 * _acceleration));
-    //if (_speed < -_maxSpeed)
-    //    _speed = -_maxSpeed;
-
-    //if (_direction == DIRECTION_CCW)
-	//   _speed = -_speed;
-}
-    */
-
-void Stepper::computeNewSpeed()  
-{
-    long dist = distanceToGo();
+    _counter->Set(_timerSet);
+    long dist = _targetPos - _position;
     double d = abs(dist);
 
-    if (dist == 0 && fabs(_speed) < 1e-6) {
-        _stepInterval = 0;
-        _speed = 0;
-        _n = 0;
+    if (dist == 0 && fabs(_curSpeed) < 1e-6) {
+        _curSpeed = 0;
+        _accSteps = 0;
         return;
     }
 
-    int dir = dist > 0 ? 1 : -1;
+    int dir = (dist >= 0 ? 1 : -1);
 
-    // vitesse max possible en fonction du reste (freinage)
-    double v_peak = sqrt(2.0 * _acceleration * d);
+    // vitesse maximale atteignable
+    double v_peak = sqrt(2.0 * _accel * d);
+    double v_target = min(_vmax, v_peak);
 
-    // nouvelle limitation dynamique + freinage
-    double v_target = min(_maxSpeed, v_peak);
-
-    // approche progressive
-    if (_speed * dir < v_target)
-    {
-        _speed += dir * _acceleration * 1.414231 / sqrt(_n + 1);
+    // ---- changement de sens ----
+    if (_curSpeed * dir < 0) {
+        // vitesse opposée → décélération uniquement
+        double dv = _accel * _timerPeriod;
+        if (fabs(_curSpeed) <= dv) {
+            _curSpeed = 0;
+            _accSteps = 0;  // reset accumulateur pour éviter steps fantômes
+        } else {
+            _curSpeed += (_curSpeed > 0 ? -dv : dv);  // décélérer vers 0
+        }
     }
-    else if (_speed * dir > v_target)
-    {
-        _speed -= dir * _acceleration * 1.414231 / sqrt(_n + 1);
+    else {
+        // approche progressive vers v_target
+        if (fabs(_curSpeed) < v_target) {
+            _curSpeed += dir * _accel * _timerPeriod;
+            if (fabs(_curSpeed) > v_target) _curSpeed = dir * v_target;
+        } else if (fabs(_curSpeed) > v_target) {
+            _curSpeed -= dir * _accel * _timerPeriod;
+            if (fabs(_curSpeed) < v_target) _curSpeed = dir * v_target;
+        }
+
+        // accumulation fractionnaire seulement après vitesse compatible
+        _accSteps += _curSpeed * _timerPeriod;
+
+        // step unique si accumulateur >= 1 ou <= -1
+        if (_accSteps >= 1.0 || _accSteps <= -1.0) {
+            int stepDir = (_accSteps > 0 ? 1 : -1);
+            long nextPos = _position + stepDir;
+
+            if ((stepDir > 0 && nextPos >= _targetPos) ||
+                (stepDir < 0 && nextPos <= _targetPos)) {
+                _position = _targetPos;
+                _accSteps = 0;
+                _curSpeed = 0;
+            } else {
+
+                if (stepDir > 0) 
+                    digitalWriteFast(_dirPin, HIGH);
+                else         
+                    digitalWriteFast(_dirPin, LOW);
+
+                digitalWriteFast(_stepPin, HIGH);
+                // très court délai (1–2 cycles)
+                digitalWriteFast(_stepPin, LOW);
+
+
+                _position = nextPos;
+                _accSteps -= stepDir;
+            }
+        }
     }
-
-    // clamp
-    if (fabs(_speed) > _maxSpeed)
-        _speed = dir * _maxSpeed;
-
-    // intervalle de step (µs)
-    if (_speed != 0)
-        _stepInterval = fabs(1000000.0 / _speed);
-    else
-        _stepInterval = 0;
 }
+
+void Stepper::moveTo(long absolute)
+{
+    if( absolute != _targetPos) 
+        _targetPos = absolute;
+}
+
+void Stepper::setMaxSpeed(double vm)
+{
+    if(vm < 0) vm = -vm;
+
+    if(_vmax != vm)
+        _vmax = vm;
+}
+
+void Stepper::setAcceleration(double accel)
+{
+    if(accel < 0) accel = -accel;
+    if(_accel != accel)   
+    _accel = accel;
+}
+
+
 
