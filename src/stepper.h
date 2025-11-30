@@ -20,11 +20,25 @@ class Stepper
     protected:
 
     public:
+        /*
+        Setup the stepper motor with specified parameters
+        stepPin: GPIO pin for step signal
+        dirPin: GPIO pin for direction signal
+        counter: Timer counter to use for ISR timing
+        timerPeriodSec: Timer period in seconds
+        steps_per_rev: Number of steps per full revolution
+        minPos: Minimum allowed position (steps)
+        maxPos: Maximum allowed position (steps)
+        */
         void Setup ( uint8_t stepPin, uint8_t dirPin, 
                      Counter& counter, double timerPeriodSec,
                      long steps_per_rev,
                      long minPos, long maxPos );
 
+        /*
+         Run the stepper control logic in the ISR
+         This function is called from the Timer1 compare interrupt
+        */
         void RunISR(void);
 
         void moveToSteps(long absolute);
