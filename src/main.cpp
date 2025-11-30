@@ -1,27 +1,6 @@
 #include <Arduino.h>
 #include "timer.h"
 #include "stepper.h"
-/********************************************************************
- * Stepper Trapézoïdal Dynamique — Timer1 + ISR
- * Vitesse max dynamique, accélération constante
- ********************************************************************/
-
-// ------------- USER CONFIG --------------------
-#define STEP_PIN 5
-#define DIR_PIN 4
-
-double vmax = 1500.0;        // PAS/S — modifiable à tout moment ➜ dynamique !
-double accel = 8000.0;       // PAS/S²
-long targetPos = 20000;      // cible à atteindre (pas)
-// ----------------------------------------------
-
-// État du moteur
-volatile long position = 0;      // position actuelle en pas
-volatile double v = 0.0;         // vitesse actuelle
-volatile double accSteps = 0.0;  // accumulateur pas fractionnaires
-
-// Timer interval
-const double ISR_PERIOD_SEC = 480e-6;   // 50 µs = 20 kHz
 
 char myData[64]; // buffer pour la trame
 
@@ -51,10 +30,6 @@ ISR(TIMER1_COMPB_vect)
   stepperB.RunISR();
 }
 
-
-
-
-
 // ------------------------ DEMO ------------------------
 void setup()
 {
@@ -62,17 +37,18 @@ void setup()
 
     Counter::Setup(C250kHz);
 
-    stepperA.Setup(STEP_PIN, DIR_PIN, counterA, 480e-6); // 480µs
+    stepperA.Setup(3, 2, counterA, 480e-6, 
+                  32000, -8000, 8000); 
     delayMicroseconds(100); // wait a bit to avoid conflict on Timer1 compare A and B
-    stepperB.Setup(STEP_PIN, DIR_PIN, counterB, 480e-6); // 480µs
+    stepperB.Setup(5, 4, counterB, 480e-6, 
+                  32000, 0, 32000); 
 
     stepperA.setMaxSpeed(1500.0);
     stepperA.setAcceleration(8000.0);
-    stepperA.moveTo(0);
 
     stepperB.setMaxSpeed(1500.0);
     stepperB.setAcceleration(8000.0);
-    stepperB.moveTo(0);
+
 }
 
 void loop()
@@ -87,9 +63,12 @@ void loop()
     Serial.print("I:");
     Serial.print(isrDuration);
     Serial.print("P:");
-    Serial.print(stepperA.getPosition());  // 2 décimales
+    Serial.print(stepperA.getPositionDeg());  // 2 décimales
     Serial.print(" v:");
     Serial.println(stepperA.getSpeed());  
+
+    stepperB.renormalizePosition();
+    
   }
 
   if (Serial.available()) 
@@ -110,11 +89,15 @@ void loop()
     // Extraire les champs
     char* token = strtok(myData, ",");
     if (!token) return;
-    uint16_t Pan_target = atoi(token);
+    double Pan_target = atof(token);
 
     token = strtok(NULL, ",");
     if (!token) return;
-    float Pan_speed = atof(token);
+    double Pan_speed = atof(token);
+
+    /*token = strtok(NULL, ",");
+    if (!token) return;
+    uint8_t dir = atoi(token);*/
     
     /*token = strtok(NULL, ",");
     if (!token) return;
@@ -151,7 +134,7 @@ void loop()
       Serial.print(",");      
       Serial.print(Pan_target); // fin de trame avec '\n'
       Serial.println("end");
-      stepperA.moveTo(Pan_target);
+      stepperA.moveToWithLimitsDeg(Pan_target);
       stepperA.setMaxSpeed(Pan_speed);
     }
   }

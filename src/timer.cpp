@@ -1,6 +1,6 @@
 #include "timer.h"
 
-uint16_t Counter::ticksPeruSec = 0;
+uint16_t Counter::ticksPerUsec = 0;
 
 bool Counter::Setup(ClockFrequency clock)
 {
@@ -41,6 +41,6 @@ bool Counter::Setup(ClockFrequency clock)
             return false;  
         break;
     }
-    ticksPeruSec = clock;
+    ticksPerUsec = clock;
     return true;
 }

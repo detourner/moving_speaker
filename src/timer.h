@@ -23,7 +23,7 @@ class CounterB;
 class Counter {
 private:
     
-    static uint16_t ticksPeruSec;        
+    static uint16_t ticksPerUsec;        
     
 public:
 
@@ -34,7 +34,7 @@ public:
 
     // Get Timer1 ticks per second (depends on clock frequency)
     static uint16_t getTicksPeruSec() {
-        return ticksPeruSec;
+        return ticksPerUsec;
     }
 
     // Interface for specific counters
