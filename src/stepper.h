@@ -59,6 +59,11 @@ class Stepper
             moveToWithLimitsSteps((long)round(absolute * _steps_per_rev / 360.0));
         }
 
+        bool isRunning() 
+        { 
+            return !(_position == _targetPos && _curSpeed == 0.0 && _accSteps == 0 ); 
+        }
+
         void renormalizePosition();
         bool homePosition();
         void setMaxSpeed(double vm);
