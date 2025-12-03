@@ -67,7 +67,15 @@ class Stepper
         void renormalizePosition();
         bool homePosition();
         void setMaxSpeed(double vm);
+        void setMaxSpeedDeg(double vmDeg)
+        {
+            setMaxSpeed( vmDeg * (double)_steps_per_rev / 360.0 );
+        }
         void setAcceleration(double a);
+        void setAccelerationDeg(double aDeg)
+        {
+            setAcceleration( aDeg * (double)_steps_per_rev / 360.0 );
+        }
 
 
         long getPositionSteps(void) { return _position; }
@@ -88,6 +96,10 @@ class Stepper
         }
 
         double getSpeed(void) { return _curSpeed; }
+        double getSpeedDeg(void) 
+        { 
+            return _curSpeed * 360.0 / (double)_steps_per_rev; 
+        }
         double getMaxSpeed(void) {return _vmax;}
         double getAccel(void) { return _accel; }
 
@@ -116,6 +128,10 @@ class Stepper
         long _steps_per_rev = 32000;      // steps per revolution
         long _minPos = 0;                 // minimum allowed position
         long _maxPos = 32000;             // maximum allowed position
+        double _vmaxMin = 1;              // minimum allowed max speed (steps/sec)   
+        double _vmaxMax = 4000.0;         // maximum allowed max speed (steps/sec)
+        double _accelMin = 100.0;         // minimum allowed acceleration (steps/sec²)
+        double _accelMax = 10000.0;       // maximum allowed acceleration (steps/sec
 
 };    
 

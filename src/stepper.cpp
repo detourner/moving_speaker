@@ -225,6 +225,9 @@ void Stepper::setMaxSpeed(double vm)
 {
     if(vm < 0) vm = -vm;
 
+    if(vm < _vmaxMin) vm = _vmaxMin;
+    if(vm > _vmaxMax) vm = _vmaxMax;
+
     if(_vmax != vm)
         _vmax = vm;
 }
@@ -236,6 +239,10 @@ void Stepper::setMaxSpeed(double vm)
 void Stepper::setAcceleration(double accel)
 {
     if(accel < 0) accel = -accel;
+
+    if(accel < _accelMin) accel = _accelMin;
+    if(accel > _accelMax) accel = _accelMax;
+
     if(_accel != accel)   
     _accel = accel;
 }

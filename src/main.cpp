@@ -65,13 +65,13 @@ void loop()
     Serial.print(",");    
     Serial.print(stepperA.getPositionDeg());  // 2 décimales
     Serial.print(",");
-    Serial.print(stepperA.getSpeed());
+    Serial.print(stepperA.getSpeedDeg());
     Serial.print(",");
     Serial.print(stepperB.isRunning());
     Serial.print(",");    
     Serial.print(stepperB.getPositionModuloDeg());  // 2 décimales
     Serial.print(",");
-    Serial.println(stepperB.getSpeed());  
+    Serial.println(stepperB.getSpeedDeg());  
 
     stepperB.renormalizePosition();
     
@@ -87,7 +87,7 @@ void loop()
     for (byte i = 0; i < n; i++) {
       if (myData[i] == ',') fieldCount++;
     }
-    if (fieldCount != 5-1) { // 4 virgules = 5 champs
+    if (fieldCount != 7-1) { // 4 virgules = 7 champs
       Serial.println("I:Invalid frame: wrong number of fields");
       return;
     }
@@ -106,6 +106,10 @@ void loop()
 
     token = strtok(NULL, ",");
     if (!token) return;
+    double motA_accel = atof(token);
+
+    token = strtok(NULL, ",");
+    if (!token) return;
     double motB_target = atof(token);
 
     token = strtok(NULL, ",");
@@ -115,6 +119,11 @@ void loop()
     token = strtok(NULL, ",");
     if (!token) return;
     RotaryMode motB_dir = (RotaryMode)atoi(token);
+
+    
+    token = strtok(NULL, ",");
+    if (!token) return;
+    double motB_accel = atof(token);
 
     /*Serial.print("I:Received targets: MotA ");;
     Serial.print(motA_target);
@@ -127,10 +136,12 @@ void loop()
     Serial.print(" Dir ");
     Serial.println(motB_dir);*/
     
-    stepperA.setMaxSpeed(motA_speed);
+    stepperA.setAccelerationDeg(motA_accel);
+    stepperA.setMaxSpeedDeg(motA_speed);
     stepperA.moveToWithLimitsDeg(motA_target);
 
-    stepperB.setMaxSpeed(motB_speed);
+    stepperB.setAccelerationDeg(motB_accel);
+    stepperB.setMaxSpeedDeg(motB_speed);
     stepperB.moveToModuloDeg(motB_target, motB_dir);
 
   }

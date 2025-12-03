@@ -5,7 +5,8 @@ import random
 import serial
 import threading
 import queue
-import ConsigneControl
+import ConsigneControl as ConsigneControl
+import MotorDisplayControl as MotorDisplayControl
 
 
 class SerialReader:
@@ -85,6 +86,8 @@ class MotorHeadUI:
         self.position_b = 0
         self.moving_a = False
         self.moving_b = False
+        self.speed_a = 0
+        self.speed_b = 0
 
         # Initialisation liaison série
         self.data_queue = queue.Queue()
@@ -107,31 +110,13 @@ class MotorHeadUI:
         meters_frame = ttk.Frame(main)
         meters_frame.pack(fill=X, pady=10)
 
-        self.tilt_meter = ttk.Meter(
-            meters_frame,
-            bootstyle=INFO,
-            subtext="moteur A",
-            interactive=False,
-            amounttotal=36000,
-            amountused=self.position_a,
-            metersize=150,
-            stripethickness=0,
-            amountformat = "{:.2f}"  # arrondi à 2 décimales
-        )
-        self.tilt_meter.pack(side=LEFT, padx=20)
+        self.motorADisp = MotorDisplayControl.MotorDisplayControl(meters_frame, title_text="Motor A Position [°]", initial_value=0.0)
+        self.motorADisp.pack(side=LEFT, padx=20)
+        self.motorBDisp = MotorDisplayControl.MotorDisplayControl(meters_frame, title_text="Motor B Position [°]", initial_value=0.0)
+        self.motorBDisp.pack(side=LEFT, padx=20)
+        
 
-        self.pan_meter = ttk.Meter(
-            meters_frame,
-            bootstyle=PRIMARY,
-            subtext="moteur B",
-            interactive=False,
-            amounttotal=36000,
-            amountused=self.position_b,
-            metersize=150,
-            stripethickness=0,
-            amountformat = "{:.2f}"  # arrondi à 2 décimales
-        )
-        self.pan_meter.pack(side=LEFT, padx=20)
+       
 
         # --- Sliders pour les consignes ------------------------------------
         sliders_frame = ttk.Labelframe(main, text="Consignes")
@@ -140,14 +125,20 @@ class MotorHeadUI:
         self.motA_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Position [°]", min_val=-90, max_val=90, initial=0)
         self.motA_target.pack(fill="x", padx=10, pady=10)
 
-        self.motA_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Vitesse", min_val=1, max_val=3000, initial=1500, step = 1)
+        self.motA_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Vitesse", min_val=0.01, max_val=45, initial=17, step = 0.01)
         self.motA_speed.pack(fill="x", padx=10, pady=10)
+
+        self.motA_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Accell", min_val=1.1, max_val=113, initial=50, step = 0.1)
+        self.motA_accel.pack(fill="x", padx=10, pady=10)
 
         self.motB_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Position [°]", min_val=0, max_val=359.99, initial=0, with_rotation=True)
         self.motB_target.pack(fill="x", padx=10, pady=10)
 
-        self.motB_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Vitesse", min_val=1, max_val=3000, initial=1500, step = 1)
+        self.motB_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Vitesse", min_val=0.01, max_val=45, initial=17, step = 0.01)
         self.motB_speed.pack(fill="x", padx=10, pady=10)
+
+        self.motB_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Accell", min_val=1.1, max_val=113, initial=50, step = 0.1)
+        self.motB_accel.pack(fill="x", padx=10, pady=10)
 
 
        
@@ -169,19 +160,21 @@ class MotorHeadUI:
     def send_target(self):
         """Envoie les consignes vers Arduino"""
         mAt = float(self.motA_target.get())
-        mAs = int(self.motA_speed.get())
+        mAs = float(self.motA_speed.get())
+        mAa = float(self.motA_accel.get())
         mBt = float(self.motB_target.get())
-        mBs = int(self.motB_speed.get())
+        mBs = float(self.motB_speed.get())
         mBd = int(self.motB_target.getDirection())  # direction de rotation
+        mBa = float(self.motB_accel.get())
        
         
         # Format: tilt_target,tilt_speed,pan_target,pan_speed,homing
-        command = f"{mAt},{mAs},{mBt},{mBs},{mBd}"
+        command = f"{mAt},{mAs},{mAa},{mBt},{mBs},{mBd},{mBa}"
         print(f"Envoi commande: {command}")
         if self.serial_connected:
             if self.serial_reader.write_command(command):
                 self.lbl_target.config(
-                    text=f"✓ Consignes envoyées → MotA: {mAt:.1f}°@{mAs:.0f} | MotB: {mBt:.1f}°@{mBs:.0f} Dir:{mBd}",
+                    text=f"✓ Consignes envoyées → MotA: {mAt:.2f}°@{mAs:.2f}/{mBa:.2f} | MotB: {mBt:.12f}°@{mBs:.2f} Dir:{mBd} / {mBa:.2f}",
                     foreground="green"
                 )
             else:
@@ -201,13 +194,19 @@ class MotorHeadUI:
                 self.moving_b = motor_data['moving_b']
                 self.position_a = motor_data['position_a']
                 self.position_b = motor_data['position_b']
+                self.speed_a = motor_data['speed_a']
+                self.speed_b = motor_data['speed_b']
                 print(f"Reçu → motA: {self.position_a}°, motB: {self.position_b}°")
         except queue.Empty:
             pass
         
         # Mise à jour des meters
-        self.tilt_meter.configure(amountused=self.position_a*100)    
-        self.pan_meter.configure(amountused=self.position_b*100) 
+        self.motorADisp.update_position(self.position_a)
+        self.motorBDisp.update_position(self.position_b)
+        self.motorADisp.update_speed(self.speed_a)  # Vitesse non implémentée pour l'instant
+        self.motorBDisp.update_speed(self.speed_b)  # Vitesse non implémentée pour
+        self.motorADisp.update_moving(self.moving_a)
+        self.motorBDisp.update_moving(self.moving_b)
 
         # Reboucle dans 200ms
         self.root.after(200, self.update_values)
