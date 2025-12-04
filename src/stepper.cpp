@@ -18,6 +18,8 @@ void Stepper::Setup(uint8_t stepPin, uint8_t dirPin,
 
     // Calculate timer counter value for desired period
     _timerSet =  (_timerPeriod * 1000000.0) / _counter->getTicksPeruSec();
+    _vmaxMax = 1.0 / _timerPeriod; // one revolution per timer period
+    _accelMax = _vmaxMax / _timerPeriod; // reach max speed in one timer period
 
     Serial.print("Timer set to ");
     Serial.println(_timerSet);
@@ -228,6 +230,7 @@ void Stepper::setMaxSpeed(double vm)
     if(vm < _vmaxMin) vm = _vmaxMin;
     if(vm > _vmaxMax) vm = _vmaxMax;
 
+
     if(_vmax != vm)
         _vmax = vm;
 }
@@ -243,8 +246,8 @@ void Stepper::setAcceleration(double accel)
     if(accel < _accelMin) accel = _accelMin;
     if(accel > _accelMax) accel = _accelMax;
 
-    if(_accel != accel)   
-    _accel = accel;
+    if(_accel != accel && isRunning() == false)   
+        _accel = accel;
 }
 
 

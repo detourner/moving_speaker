@@ -2,9 +2,7 @@
 #include "timer.h"
 #include "stepper.h"
 
-char myData[64]; // buffer pour la trame
-
-volatile uint16_t a = 0;
+char myData[64]; // frame buffer for incoming serial packet
 
 CounterA counterA;
 CounterB counterB;
@@ -12,16 +10,17 @@ CounterB counterB;
 Stepper stepperA;
 Stepper stepperB;
 
-uint16_t duration;
+// for debug only
+// volatile unsigned long isrDuration = 0;  // in microseconds
 
-volatile unsigned long isrDuration = 0;  // en microsecondes
-// ------------------ TRAPÉZOÏDE DYNAMIQUE -------------------
 ISR(TIMER1_COMPA_vect)
 {
-  unsigned long start = micros();
+  // for debug only, measure ISR duration
+  //unsigned long start = micros();
+  
   stepperA.RunISR();
 
-  isrDuration = micros() - start;
+  //isrDuration = micros() - start;
 
 }
 
@@ -30,7 +29,7 @@ ISR(TIMER1_COMPB_vect)
   stepperB.RunISR();
 }
 
-// ------------------------ DEMO ------------------------
+
 void setup()
 {
     Serial.begin(115200);
@@ -43,12 +42,32 @@ void setup()
     stepperB.Setup(5, 4, counterB, 480e-6, 
                   32000, 0, 32000); 
 
-    stepperA.setMaxSpeed(1500.0);
-    stepperA.setAcceleration(8000.0);
-
-    stepperB.setMaxSpeed(1500.0);
-    stepperB.setAcceleration(8000.0);
-
+    Serial.println("I: Moving Speaker V1.0 by Détourner");
+    Serial.println("I:");
+    Serial.print(stepperA.getMinPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperA.getMaxPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperA.getMaxSpeedDegMin());
+    Serial.print(",");
+    Serial.print(stepperA.getMaxSpeedDegMax());
+    Serial.print(",");
+    Serial.print(stepperA.getAccelDegMin()); 
+    Serial.print(",");   
+    Serial.print(stepperA.getAccelDegMax());
+    Serial.print(",");
+    Serial.print(stepperB.getMinPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperB.getMaxPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperB.getMaxSpeedDegMin());
+    Serial.print(",");
+    Serial.print(stepperB.getMaxSpeedDegMax());
+    Serial.print(",");
+    Serial.print(stepperB.getAccelDegMin()); 
+    Serial.print(",");   
+    Serial.println(stepperB.getAccelDegMax());
+    Serial.println("I: Ready");
 }
 
 void loop()
@@ -63,13 +82,13 @@ void loop()
     Serial.print("P:");
     Serial.print(stepperA.isRunning());
     Serial.print(",");    
-    Serial.print(stepperA.getPositionDeg());  // 2 décimales
+    Serial.print(stepperA.getPositionDeg());  // position (two decimal places)
     Serial.print(",");
     Serial.print(stepperA.getSpeedDeg());
     Serial.print(",");
     Serial.print(stepperB.isRunning());
     Serial.print(",");    
-    Serial.print(stepperB.getPositionModuloDeg());  // 2 décimales
+    Serial.print(stepperB.getPositionModuloDeg());  // position modulo (two decimal places)
     Serial.print(",");
     Serial.println(stepperB.getSpeedDeg());  
 
@@ -80,22 +99,21 @@ void loop()
   if (Serial.available()) 
   {
     byte n = Serial.readBytesUntil('\n', myData, sizeof(myData) - 1);
-    myData[n] = '\0'; // null-byte
+    myData[n] = '\0'; // null terminator
 
-    // Compter le nombre de champs (virgules)
+    // Count the number of fields (commas)
     int fieldCount = 0;
     for (byte i = 0; i < n; i++) {
       if (myData[i] == ',') fieldCount++;
     }
-    if (fieldCount != 7-1) { // 4 virgules = 7 champs
-      Serial.println("I:Invalid frame: wrong number of fields");
+    if (fieldCount != 7-1) { // Expecting 7 fields -> 6 commas
+      Serial.println("E:Invalid frame: wrong number of fields");
       return;
     }
 
-    /*Serial.print("I:Received data: ");
-    Serial.println(myData);*/
-
-    // Extraire les champs
+    // Extract fields
+    // Frame format expected (comma separated):
+    // motA_target, motA_speed, motA_accel, motB_target, motB_speed, motB_dir, motB_accel
     char* token = strtok(myData, ",");
     if (!token) return;
     double motA_target = atof(token);
@@ -125,17 +143,6 @@ void loop()
     if (!token) return;
     double motB_accel = atof(token);
 
-    /*Serial.print("I:Received targets: MotA ");;
-    Serial.print(motA_target);
-    Serial.print("° @ ");
-    Serial.print(motA_speed);
-    Serial.print(" | MotB ");
-    Serial.print(motB_target);
-    Serial.print("° @ ");
-    Serial.print(motB_speed);
-    Serial.print(" Dir ");
-    Serial.println(motB_dir);*/
-    
     stepperA.setAccelerationDeg(motA_accel);
     stepperA.setMaxSpeedDeg(motA_speed);
     stepperA.moveToWithLimitsDeg(motA_target);
@@ -143,6 +150,23 @@ void loop()
     stepperB.setAccelerationDeg(motB_accel);
     stepperB.setMaxSpeedDeg(motB_speed);
     stepperB.moveToModuloDeg(motB_target, motB_dir);
+
+    Serial.print("S: ");
+    Serial.print(stepperA.isRunning());
+    Serial.print(",");
+    Serial.print(stepperA.getTargetPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperA.getMaxSpeedDeg());
+    Serial.print(",");
+    Serial.print(stepperA.getAccelDeg());
+    Serial.print(",");
+    Serial.print(stepperB.isRunning());
+    Serial.print(",");
+    Serial.print(stepperB.getTargetPositionDeg());
+    Serial.print(",");    
+    Serial.print(stepperB.getMaxSpeedDeg());
+    Serial.print(",");
+    Serial.println(stepperB.getAccelDeg());
 
   }
 }

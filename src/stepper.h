@@ -101,8 +101,52 @@ class Stepper
             return _curSpeed * 360.0 / (double)_steps_per_rev; 
         }
         double getMaxSpeed(void) {return _vmax;}
+        double getMaxSpeedDeg(void) 
+        { 
+            return _vmax * 360.0 / (double)_steps_per_rev; 
+        }
         double getAccel(void) { return _accel; }
+        double getAccelDeg(void) 
+        { 
+            return _accel * 360.0 / (double)_steps_per_rev; 
+        }
+        double getTargetPosition(void) { return _targetPos; }
+        double getTargetPositionDeg(void) 
+        { 
+            return (double)_targetPos * 360.0 / (double)_steps_per_rev; 
+        }
 
+        double getMaxSpeedMax(void) { return _vmaxMax; }
+        double getMaxSpeedDegMax(void) 
+        { 
+            return _vmaxMax * 360.0 / (double)_steps_per_rev; 
+        }
+        double getMaxSpeedMin(void) { return _vmaxMin; }
+        double getMaxSpeedDegMin(void) 
+        { 
+            return _vmaxMin * 360.0 / (double)_steps_per_rev; 
+        }
+        double getAccelMin(void) { return _accelMin; }
+        double getAccelDegMin(void) 
+        { 
+            return _accelMin * 360.0 / (double)_steps_per_rev; 
+        }
+        double getAccelMax(void) { return _accelMax; }
+        double getAccelDegMax(void) 
+        { 
+            return _accelMax * 360.0 / (double)_steps_per_rev; 
+        }
+
+        double getMaxPosition(void) { return _maxPos; }
+        double getMaxPositionDeg(void) 
+        { 
+            return (double)_maxPos * 360.0 / (double)_steps_per_rev; 
+        }
+        double getMinPosition(void) { return _minPos; }
+        double getMinPositionDeg(void) 
+        { 
+            return (double)_minPos * 360.0 / (double)_steps_per_rev; 
+        }
 
     private:
         // GPIO pins for stepper motor control

@@ -5,56 +5,90 @@ import random
 import serial
 import threading
 import queue
+import argparse
+import datetime
 import ConsigneControl as ConsigneControl
 import MotorDisplayControl as MotorDisplayControl
 
 
 class SerialReader:
-    """Gère la communication série avec Arduino"""
-    def __init__(self, port='COM3', baudrate=115200, data_queue=None):
+    """Handles serial communication with the Arduino and optional logging."""
+    def __init__(self, port='COM3', baudrate=115200, data_queue=None, log_path=None):
         self.port = port
         self.baudrate = baudrate
         self.data_queue = data_queue if data_queue else queue.Queue()
         self.running = False
         self.serial_connection = None
+        self.log_path = log_path
+        self.log_fh = None
+        if self.log_path:
+            try:
+                # open in append mode
+                self.log_fh = open(self.log_path, 'a', encoding='utf-8')
+            except Exception as e:
+                print(f"Unable to open log file '{self.log_path}': {e}")
         
     def connect(self):
-        """Établit la connexion série"""
+        """Establish the serial connection."""
         try:
             self.serial_connection = serial.Serial(self.port, self.baudrate, timeout=1)
             self.running = True
             return True
         except serial.SerialException as e:
-            print(f"Erreur connexion série: {e}")
+            print(f"Serial connection error: {e}")
             return False
     
     def disconnect(self):
-        """Ferme la connexion série"""
+        """Close the serial connection."""
         self.running = False
         if self.serial_connection and self.serial_connection.is_open:
             self.serial_connection.close()
+        if self.log_fh:
+            try:
+                self.log_fh.close()
+            except Exception:
+                pass
     
     def write_command(self, command):
-        """Envoie une commande à Arduino"""
+        """Send a command line to the Arduino over serial."""
         if self.serial_connection and self.serial_connection.is_open:
             try:
                 self.serial_connection.write((command + '\n').encode('utf-8'))
+                # log outgoing frame if logging enabled
+                if self.log_fh:
+                    ts = datetime.datetime.now().isoformat(sep=' ', timespec='milliseconds')
+                    try:
+                        self.log_fh.write(f"{ts} Serial -> {command}\n")
+                        self.log_fh.flush()
+                    except Exception:
+                        pass
                 return True
             except Exception as e:
-                print(f"Erreur envoi commande: {e}")
+                print(f"Error sending command: {e}")
                 return False
         return False
     
     def read_loop(self):
-        """Boucle de lecture (à exécuter dans un thread)"""
+        """Read loop (intended to run in a background thread)."""
         while self.running:
             try:
                 if self.serial_connection.in_waiting > 0:
                     line = self.serial_connection.readline().decode('utf-8').strip()
-                    #print(f"Reçu série: {line}")
+                    if not line:
+                        continue
+
+                    # log incoming frame if logging enabled
+                    if self.log_fh:
+                        ts = datetime.datetime.now().isoformat(sep=' ', timespec='milliseconds')
+                        try:
+                            self.log_fh.write(f"{ts} Serial <- {line}\n")
+                            self.log_fh.flush()
+                        except Exception:
+                            pass
+
+                    # If it's a P: status frame, parse and queue it for the UI
                     if line.startswith('P:'):
-                        # Format: P:isMoving_a,position_a,isMoving_b,position_b
-                        data = line[2:]  # Enlever "P:"
+                        data = line[2:]
                         parts = data.split(',')
                         if len(parts) == 6:
                             try:
@@ -66,22 +100,24 @@ class SerialReader:
                                     'position_b': float(parts[4]),
                                     'speed_b': float(parts[5])
                                 }
-                                #print(f"Données moteur: {motor_data}")
+                                # put parsed motor data into the queue for the UI
                                 self.data_queue.put(motor_data)
-
                             except ValueError:
-                                print(f"Erreur parsing: {line}")
+                                print(f"Parsing error: {line}")
+                    else:
+                        # For any other frame (S:, I:, E: or custom), print it to the console
+                        print(f"Serial <- {line}")
             except Exception as e:
-                print(f"Erreur lecture série: {e}")
+                print(f"Serial read error: {e}")
 
 
 class MotorHeadUI:
-    def __init__(self, root, serial_port='COM3'):
+    def __init__(self, root, serial_port='COM3', log_path=None):
         self.root = root
         self.root.title("Motor Head Control")
         self.style = ttk.Style("flatly")
 
-        # Valeurs simulées/reçues
+        # Simulated / received values
         self.position_a = 0
         self.position_b = 0
         self.moving_a = False
@@ -89,20 +125,20 @@ class MotorHeadUI:
         self.speed_a = 0
         self.speed_b = 0
 
-        # Initialisation liaison série
+        # Serial initialization
         self.data_queue = queue.Queue()
-        self.serial_reader = SerialReader(port=serial_port, data_queue=self.data_queue, baudrate=115200)
+        self.serial_reader = SerialReader(port=serial_port, data_queue=self.data_queue, baudrate=115200, log_path=log_path)
         self.serial_connected = self.serial_reader.connect()
         
         if self.serial_connected:
-            # Démarrer le thread de lecture série
+            # Start the serial reading thread
             self.serial_thread = threading.Thread(target=self.serial_reader.read_loop, daemon=True)
             self.serial_thread.start()
-            print(f"Connexion série établie sur {serial_port}")
+            print(f"Serial connection established on {serial_port}")
         else:
-            print(f"Impossible de se connecter à {serial_port}")
+            print(f"Unable to connect to {serial_port}")
 
-        # Frame principale
+        # Main frame
         main = ttk.Frame(root, padding=20)
         main.pack(fill=BOTH, expand=YES)
 
@@ -118,14 +154,14 @@ class MotorHeadUI:
 
        
 
-        # --- Sliders pour les consignes ------------------------------------
+        # --- Sliders for command inputs ------------------------------------
         sliders_frame = ttk.Labelframe(main, text="Consignes")
         sliders_frame.pack(fill=X, pady=10, padx=10)
 
         self.motA_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Position [°]", min_val=-90, max_val=90, initial=0)
         self.motA_target.pack(fill="x", padx=10, pady=10)
 
-        self.motA_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Vitesse", min_val=0.01, max_val=45, initial=17, step = 0.01)
+        self.motA_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
         self.motA_speed.pack(fill="x", padx=10, pady=10)
 
         self.motA_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Accell", min_val=1.1, max_val=113, initial=50, step = 0.1)
@@ -134,7 +170,7 @@ class MotorHeadUI:
         self.motB_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Position [°]", min_val=0, max_val=359.99, initial=0, with_rotation=True)
         self.motB_target.pack(fill="x", padx=10, pady=10)
 
-        self.motB_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Vitesse", min_val=0.01, max_val=45, initial=17, step = 0.01)
+        self.motB_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
         self.motB_speed.pack(fill="x", padx=10, pady=10)
 
         self.motB_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Accell", min_val=1.1, max_val=113, initial=50, step = 0.1)
@@ -144,7 +180,7 @@ class MotorHeadUI:
        
        
 
-        # --- Boutons de contrôle -------------------------------------------------
+        # --- Control buttons -------------------------------------------------
         buttons_frame = ttk.Frame(sliders_frame)
         buttons_frame.pack(fill=X, pady=10)
 
@@ -154,11 +190,11 @@ class MotorHeadUI:
         
         ttk.Button(buttons_frame, text="Envoyer consignes", bootstyle=SUCCESS, command=self.send_target).pack(side=LEFT, padx=5)
        
-        # Mise à jour régulière (simulation)
+        # Periodic update (simulation or reading from serial)
         self.update_values()
 
     def send_target(self):
-        """Envoie les consignes vers Arduino"""
+        """Send the command set to the Arduino."""
         mAt = float(self.motA_target.get())
         mAs = float(self.motA_speed.get())
         mAa = float(self.motA_accel.get())
@@ -168,9 +204,9 @@ class MotorHeadUI:
         mBa = float(self.motB_accel.get())
        
         
-        # Format: tilt_target,tilt_speed,pan_target,pan_speed,homing
+        # Format: motA_target,motA_speed,motA_accel,motB_target,motB_speed,motB_dir,motB_accel
         command = f"{mAt},{mAs},{mAa},{mBt},{mBs},{mBd},{mBa}"
-        print(f"Envoi commande: {command}")
+        print(f"Sending command: {command}")
         if self.serial_connected:
             if self.serial_reader.write_command(command):
                 self.lbl_target.config(
@@ -185,8 +221,8 @@ class MotorHeadUI:
    
 
     def update_values(self):
-        """Lecture des données capteur (série ou simulation)"""
-        # Lire les données de la queue série
+        """Read sensor data (from serial or simulation) and update the UI."""
+        # Read data from the serial queue
         try:
             while True:
                 motor_data = self.data_queue.get_nowait()
@@ -196,25 +232,32 @@ class MotorHeadUI:
                 self.position_b = motor_data['position_b']
                 self.speed_a = motor_data['speed_a']
                 self.speed_b = motor_data['speed_b']
-                print(f"Reçu → motA: {self.position_a}°, motB: {self.position_b}°")
+                print(f"Received → motA: {self.position_a}°, motB: {self.position_b}°")
         except queue.Empty:
             pass
         
-        # Mise à jour des meters
+        # Update meter widgets
         self.motorADisp.update_position(self.position_a)
         self.motorBDisp.update_position(self.position_b)
-        self.motorADisp.update_speed(self.speed_a)  # Vitesse non implémentée pour l'instant
-        self.motorBDisp.update_speed(self.speed_b)  # Vitesse non implémentée pour
+        self.motorADisp.update_speed(self.speed_a)  
+        self.motorBDisp.update_speed(self.speed_b) 
         self.motorADisp.update_moving(self.moving_a)
         self.motorBDisp.update_moving(self.moving_b)
 
-        # Reboucle dans 200ms
-        self.root.after(200, self.update_values)
+        # update every ans 50ms
+        self.root.after(50, self.update_values)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Motor Head UI (serial port optional)")
+    parser.add_argument("-p", "--port", dest="serial_port", default="COM3",
+                        help="Serial port to connect to (default: COM3)")
+    parser.add_argument("-l", "--log", dest="log", default=None,
+                        help="Optional path to a log file. If provided, all sent/received frames are appended to this file.")
+    args = parser.parse_args()
+
     root = ttk.Window(themename="flatly")
-    # Adapter le port COM selon votre configuration (COM3, COM4, etc.)
-    app = MotorHeadUI(root, serial_port='COM3')
+    # Use provided serial port or default to COM3
+    app = MotorHeadUI(root, serial_port=args.serial_port, log_path=args.log)
     
     def on_closing():
         if app.serial_connected:

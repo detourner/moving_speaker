@@ -5,11 +5,11 @@ from ttkbootstrap.constants import *
 
 class ConsigneControl(ttk.Frame):
     """
-    Widget composite aligné sur une seule ligne :
-    [ Label | Entry | ---- Scale ---- ] + option rotation
+    Composite widget laid out on a single row:
+    [ Label | Entry | ---- Scale ---- ] + optional rotation controls
     """
 
-    SCALE_MIN_WIDTH = 200  # largeur fixe du scale
+    SCALE_MIN_WIDTH = 200  # fixed minimum width for the scale widget
 
     def __init__(self, master, label="Consigne", min_val=0.0, max_val=100.0,
                  initial=0.0, step=0.01, with_rotation=False, *args, **kwargs):
@@ -19,7 +19,7 @@ class ConsigneControl(ttk.Frame):
         self.max_val = max_val
         self.step = step
 
-        # Variable partagée pour valeur
+        # Shared variable for the current value
         self.var = tk.DoubleVar(value=initial)
 
         # Label
@@ -41,10 +41,10 @@ class ConsigneControl(ttk.Frame):
         )
         self.scale.grid(row=0, column=2, padx=5, pady=5, sticky=EW)
 
-        # Column configure pour garantir largeur constante du Scale
+        # Configure column to guarantee the scale keeps a minimum width
         self.columnconfigure(2, weight=1, minsize=self.SCALE_MIN_WIDTH)
 
-        # Bind pour synchroniser l’entrée clavier
+        # Bind entry key events to synchronize typed value with the scale
         self.entry.bind("<KeyRelease>", self._on_entry_typed)
 
         # --- Option de rotation ---
@@ -60,13 +60,13 @@ class ConsigneControl(ttk.Frame):
 
     # ---------- Synchronisation ----------
     def _on_scale_moved(self, event=None):
-        """Déplacement du scale."""
+        """Scale moved: snap value to step and update variable."""
         value = round(self.scale.get(), 2)
         value = round(self._snap_to_step(value), 2)
         self.var.set(value)
 
     def _on_entry_typed(self, event=None):
-        """Saisie au clavier."""
+        """Keyboard entry: validate, clamp and snap to step."""
         try:
             value = float(self.entry.get())
             value = self._snap_to_step(value)
@@ -76,7 +76,7 @@ class ConsigneControl(ttk.Frame):
             pass
 
     def _snap_to_step(self, value):
-        """Force la valeur à être un multiple de self.step"""
+        """Force the value to be a multiple of self.step."""
         steps = round(value / self.step)
         return steps * self.step
 
@@ -89,12 +89,12 @@ class ConsigneControl(ttk.Frame):
         self.var.set(value)
 
     def getDirection(self):
-        """Retourne 0=CW, 1=CCW, 2=Shortest (si rotation activée)"""
+        """Return direction mode: 0=CW, 1=CCW, 2=Shortest (if rotation enabled)."""
         if self.with_rotation:
             return self.rot_var.get()
         return None
 
     def setDirection(self, val):
-        """Définir le sens de rotation"""
+        """Set the rotation direction mode."""
         if self.with_rotation and val in (0, 1, 2):
             self.rot_var.set(val)

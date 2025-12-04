@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <Arduino.h>
 
-// Evailable clock frequencies for Timer1
+// Available clock frequencies for Timer1
 enum ClockFrequency : uint8_t {
     //C16MHz = 0.166667,
     //C2MHz = 0.5,
@@ -32,7 +32,7 @@ public:
     // Setup Timer1 with specified clock frequency
     static bool Setup(ClockFrequency clock);
 
-    // Get Timer1 ticks per second (depends on clock frequency)
+    // Get Timer1 ticks per microsecond (depends on clock frequency)
     static uint16_t getTicksPeruSec() {
         return ticksPerUsec;
     }
