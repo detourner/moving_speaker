@@ -146,6 +146,7 @@ python -c "import serial, time; s=serial.Serial('COM3',115200,timeout=1); time.s
 - `src/stepper.h` / `src/stepper.cpp` — unit conversions, limits and rotation modes
 - `src/timer.h` / `src/timer.cpp` — timer configuration and ISRs
 
+---
 **Credit**
 - Concept : Armand Lesecq https://www.armandlesecq.com
 - Mechanics : osoba_hrvoje https://hrvojespudic.net
