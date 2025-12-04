@@ -61,7 +61,7 @@ class Stepper
 
         bool isRunning() 
         { 
-            return !(_position == _targetPos && _curSpeed == 0.0 && _accSteps == 0 ); 
+            return !(_position == _targetPos && _curSpeed == 0.0 && _accSteps == 0 && _reversing == false); 
         }
 
         void renormalizePosition();
@@ -158,11 +158,13 @@ class Stepper
         volatile long _position = 0;      // current position in steps
         volatile double _curSpeed = 0.0;  // current velocity in steps/sec
         volatile double _accSteps = 0.0;  // accumulator for fractional steps
+        volatile bool _reversing = false; // flag indicating if motor is reversing (change direction asked)
 
         // Speed and acceleration parameters
         double _vmax = 1500.0;            // maximum velocity in steps/sec - can be changed dynamically
         double _accel = 8000.0;           // acceleration in steps/sec²
         long _targetPos = 0;              // target position to reach (steps)
+        long _targetDuringReverse = 0;    // target position to set after reversing
 
         // Timer configuration
         double _timerPeriod = 480e-6;     // timer period in seconds (480 microseconds)

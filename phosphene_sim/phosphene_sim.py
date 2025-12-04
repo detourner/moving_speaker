@@ -232,7 +232,7 @@ class MotorHeadUI:
                 self.position_b = motor_data['position_b']
                 self.speed_a = motor_data['speed_a']
                 self.speed_b = motor_data['speed_b']
-                print(f"Received → motA: {self.position_a}°, motB: {self.position_b}°")
+                
         except queue.Empty:
             pass
         

@@ -37,9 +37,18 @@ void Stepper::RunISR(void)
     long dist = _targetPos - _position;
     double d = abs(dist);
 
+    if(_reversing && fabs(_curSpeed) < 1e-6) {
+        // if reversing and speed is near zero, apply the new target
+        _curSpeed = 0.0;
+        _accSteps = 0; 
+        _targetPos = _targetDuringReverse;
+        _reversing = false;
+        return;
+    }
+
     if (dist == 0 && fabs(_curSpeed) < 1e-6) {
         _curSpeed = 0;
-        _accSteps = 0;
+        _accSteps = 0;        
         return;
     }
 
@@ -49,57 +58,56 @@ void Stepper::RunISR(void)
     double v_peak = sqrt(2.0 * _accel * d);
     double v_target = min(_vmax, v_peak);
 
-    // Handle direction changes
-    if (_curSpeed * dir < 0) {
-        // Opposite velocity direction - decelerate only
-        double dv = _accel * _timerPeriod;
-        if (fabs(_curSpeed) <= dv) {
-            _curSpeed = 0;
-            _accSteps = 0;  // reset accumulator to avoid phantom steps
-        } else {
-            _curSpeed += (_curSpeed > 0 ? -dv : dv);  // decelerate towards zero
-        }
+    if (_reversing) {
+        // if reversing, target speed is zero (for deceleration to stop)
+        v_target = 0;
     }
-    else {
-        // Progressive acceleration/deceleration towards v_target
-        if (fabs(_curSpeed) < v_target) {
-            _curSpeed += dir * _accel * _timerPeriod;
-            if (fabs(_curSpeed) > v_target) _curSpeed = dir * v_target;
-        } else if (fabs(_curSpeed) > v_target) {
-            _curSpeed -= dir * _accel * _timerPeriod;
-            if (fabs(_curSpeed) < v_target) _curSpeed = dir * v_target;
-        }
 
-        // Accumulate fractional steps for smooth motion
-        _accSteps += _curSpeed * _timerPeriod;
+    // Progressive acceleration/deceleration towards v_target
+    if (fabs(_curSpeed) < v_target) {
+        // accelerating
+        _curSpeed += dir * _accel * _timerPeriod;
+        if (fabs(_curSpeed) > v_target) _curSpeed = dir * v_target;
+    } else if (fabs(_curSpeed) > v_target) {
+       // decelerating
+        _curSpeed -= dir * _accel * _timerPeriod;
+        if (fabs(_curSpeed) < v_target) _curSpeed = dir * v_target;
+    }
 
-        // Single step if accumulator reaches ±1
-        if (_accSteps >= 1.0 || _accSteps <= -1.0) {
-            int stepDir = (_accSteps > 0 ? 1 : -1);
-            long nextPos = _position + stepDir;
+    // Accumulate fractional steps for smooth motion
+    _accSteps += _curSpeed * _timerPeriod;
 
-            if ((stepDir > 0 && nextPos >= _targetPos) ||
-                (stepDir < 0 && nextPos <= _targetPos)) {
+    // Single step if accumulator reaches ±1
+    if (_accSteps >= 1.0 || _accSteps <= -1.0) {
+        int stepDir = (_accSteps > 0 ? 1 : -1);
+        long nextPos = _position + stepDir;
+
+        if ((stepDir > 0 && nextPos >= _targetPos) ||
+            (stepDir < 0 && nextPos <= _targetPos)) {
+            if(_reversing == false) 
+            {
+                // only update position if not reversing, because in that case 
+                //the speed target is set to zero but position is not yet reached
                 _position = _targetPos;
-                _accSteps = 0;
-                _curSpeed = 0;
-            } else {
-
-                // Set direction pin
-                if (stepDir > 0) 
-                    digitalWriteFast(_dirPin, HIGH);
-                else         
-                    digitalWriteFast(_dirPin, LOW);
-
-                // Generate step pulse
-                digitalWriteFast(_stepPin, HIGH);
-                __asm__("nop\nnop\nnop\nnop\nnop\nnop");  // Small CPU delay for step pulse width
-                digitalWriteFast(_stepPin, LOW);
-
-
-                _position = nextPos;
-                _accSteps -= stepDir;
             }
+            _accSteps = 0;
+            _curSpeed = 0;
+        } else {
+
+            // Set direction pin
+            if (stepDir > 0) 
+                digitalWriteFast(_dirPin, HIGH);
+            else         
+                digitalWriteFast(_dirPin, LOW);
+
+            // Generate step pulse
+            digitalWriteFast(_stepPin, HIGH);
+            __asm__("nop\nnop\nnop\nnop\nnop\nnop");  // Small CPU delay for step pulse width
+            digitalWriteFast(_stepPin, LOW);
+
+
+            _position = nextPos;
+            _accSteps -= stepDir;
         }
     }
 }
@@ -111,7 +119,7 @@ void Stepper::RunISR(void)
 void Stepper::renormalizePosition()
 {
     // Only if motor is at rest
-    if (_curSpeed == 0.0 && _accSteps == 0) 
+    if (isRunning() == false)
     {
         int32_t modulo = _position % _steps_per_rev;
         if (modulo < 0) modulo += _steps_per_rev;
@@ -215,8 +223,23 @@ void Stepper::moveToWithLimitsSteps(long absolute)
  */
 void Stepper::moveToSteps(long absolute)
 {
-    if( absolute != _targetPos) 
-        _targetPos = absolute;
+    if( absolute != _targetPos)
+    { 
+        long currentDir = _targetPos - _position; // acutal direction
+        long newDir = absolute - _position; // desired direction
+
+        if (isRunning() && (currentDir * newDir < 0)) // opposite directions and motor is running
+        {
+            // If moving and new target is in opposite direction, initiate reversing
+            // and not apply target yet, just store it
+            _reversing = true;
+            _targetDuringReverse = absolute;
+        } else {
+            // no reversing, set target directly
+            _targetPos = absolute;
+            _reversing = false;
+        }
+    }
 }
 
 /**
