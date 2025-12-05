@@ -43,7 +43,7 @@ void setup()
                   32000, 0, 32000); 
 
     Serial.println("I: Moving Speaker V1.0 by Détourner");
-    Serial.println("I:");
+    Serial.print("I:");
     Serial.print(stepperA.getMinPositionDeg());
     Serial.print(",");
     Serial.print(stepperA.getMaxPositionDeg());

@@ -62,6 +62,7 @@ class SerialReader:
                         self.log_fh.flush()
                     except Exception:
                         pass
+                    print(f"Serial -> {command}")
                 return True
             except Exception as e:
                 print(f"Error sending command: {e}")
@@ -173,7 +174,7 @@ class MotorHeadUI:
         self.motB_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
         self.motB_speed.pack(fill="x", padx=10, pady=10)
 
-        self.motB_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Accell", min_val=1.1, max_val=113, initial=50, step = 0.1)
+        self.motB_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Accel", min_val=1.1, max_val=113, initial=50, step = 0.1)
         self.motB_accel.pack(fill="x", padx=10, pady=10)
 
 
@@ -206,11 +207,11 @@ class MotorHeadUI:
         
         # Format: motA_target,motA_speed,motA_accel,motB_target,motB_speed,motB_dir,motB_accel
         command = f"{mAt},{mAs},{mAa},{mBt},{mBs},{mBd},{mBa}"
-        print(f"Sending command: {command}")
         if self.serial_connected:
             if self.serial_reader.write_command(command):
+                # Use correct accel variables and reasonable decimal precision for display
                 self.lbl_target.config(
-                    text=f"✓ Consignes envoyées → MotA: {mAt:.2f}°@{mAs:.2f}/{mBa:.2f} | MotB: {mBt:.12f}°@{mBs:.2f} Dir:{mBd} / {mBa:.2f}",
+                    text=f"✓ Consignes envoyées → MotA: {mAt:.2f}° @{mAs:.2f}/{mAa:.2f} | MotB: {mBt:.2f}° @{mBs:.2f} Dir:{mBd} / {mBa:.2f}",
                     foreground="green"
                 )
             else:

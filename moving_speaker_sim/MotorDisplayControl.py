@@ -14,22 +14,22 @@ class MotorDisplayControl(ttk.Frame):
         self.frame = ttk.Labelframe(self, text=title_text, bootstyle="info")   
         self.frame.pack()
         
-        # Container for the top-right numeric indicator
-        self.top_frame = ttk.Frame(self.frame)
-        self.top_frame.pack(fill=tk.X, padx=5, pady=5)
-        
+        # Right-side status column (numeric indicator above, circle below)
+        self.right_col = ttk.Frame(self.frame)
+        self.right_col.pack(side=tk.RIGHT, anchor='n', padx=5, pady=5)
+
         # Numeric status indicator (top-right)
-        self.status_label = ttk.Label(self.top_frame, text="0.00", font=("Arial", 10))
-        self.status_label.pack(side=tk.RIGHT)
-        
+        self.status_label = ttk.Label(self.right_col, text="0.00", font=("Arial", 10))
+        self.status_label.pack(side=tk.TOP, anchor='e')
+
         # Colored circle below the status indicator
-        self.canvas_status = tk.Canvas(self.frame, width=20, height=20, bg="white", highlightthickness=0)
-        self.canvas_status.pack(side=tk.RIGHT, padx=5, pady=5)
+        self.canvas_status = tk.Canvas(self.right_col, width=20, height=20, bg="white", highlightthickness=0)
+        self.canvas_status.pack(side=tk.TOP, anchor='e', pady=(4,0))
         self.status_circle = self.canvas_status.create_oval(2, 2, 18, 18, fill="gray", outline="black")
-        
-        # Main value label (large), vertically centered
-        self.value_label = ttk.Label(self.frame, text=f"{self.value_var.get():.2f}", font=("Arial", 32, "bold"),)
-        self.value_label.pack(expand=True, pady=0, padx=50)
+
+        # Main value label (large), vertically centered on the left
+        self.value_label = ttk.Label(self.frame, text=f"{self.value_var.get():.2f}", font=("Arial", 32, "bold"))
+        self.value_label.pack(side=tk.LEFT, expand=True, padx=20, pady=10)
 
     def update_position(self, new_value):
         """Update displayed position value (formatted to 2 decimals)."""

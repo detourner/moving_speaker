@@ -21,9 +21,6 @@ void Stepper::Setup(uint8_t stepPin, uint8_t dirPin,
     _vmaxMax = 1.0 / _timerPeriod; // one revolution per timer period
     _accelMax = _vmaxMax / _timerPeriod; // reach max speed in one timer period
 
-    Serial.print("Timer set to ");
-    Serial.println(_timerSet);
-
     _counter->Set(_timerSet);
     _counter->Enable();
 
