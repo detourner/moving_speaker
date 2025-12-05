@@ -145,6 +145,12 @@ python -c "import serial, time; s=serial.Serial('COM3',115200,timeout=1); time.s
 - `src/main.cpp` — main logic, serial parsing, frame formats
 - `src/stepper.h` / `src/stepper.cpp` — unit conversions, limits and rotation modes
 - `src/timer.h` / `src/timer.cpp` — timer configuration and ISRs
+---
+ 
+---
+**Simulator (PC)**
+- A PC simulator with a GUI is included in the `moving_speaker_sim` directory. It connects to the Arduino over serial, lets you send setpoints and displays motor status.
+- Read the simulator documentation here: `moving_speaker_sim/README.md`
 
 ---
 **Credit**
