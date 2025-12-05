@@ -114,7 +114,7 @@ class SerialReader:
 class MotorHeadUI:
     def __init__(self, root, serial_port='COM3', log_path=None):
         self.root = root
-        self.root.title("Motor Head Control")
+        self.root.title("Moving Speaker Sim V1.0")
         self.style = ttk.Style("flatly")
 
         # Simulated / received values
@@ -158,7 +158,7 @@ class MotorHeadUI:
         sliders_frame = ttk.Labelframe(main, text="Consignes")
         sliders_frame.pack(fill=X, pady=10, padx=10)
 
-        self.motA_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Position [°]", min_val=-90, max_val=90, initial=0)
+        self.motA_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Position [°]", min_val=-90, max_val=90, initial=0, step = 0.01)
         self.motA_target.pack(fill="x", padx=10, pady=10)
 
         self.motA_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
@@ -167,7 +167,7 @@ class MotorHeadUI:
         self.motA_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot A Accell", min_val=1.1, max_val=113, initial=50, step = 0.1)
         self.motA_accel.pack(fill="x", padx=10, pady=10)
 
-        self.motB_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Position [°]", min_val=0, max_val=359.99, initial=0, with_rotation=True)
+        self.motB_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Position [°]", min_val=0, max_val=359.99, initial=0, with_rotation=True, step=0.01)
         self.motB_target.pack(fill="x", padx=10, pady=10)
 
         self.motB_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
