@@ -2,6 +2,9 @@
 
 This repository contains the Arduino firmware for the "Moving Speaker" project (control of two stepper motors to aim a speaker). The main firmware is in `src/main.cpp`.
 
+**Hardware**
+- The firmware is developed and tested for the Arduino Nano platform. 
+
 **Purpose**
 - Drive two stepper motors (A and B) with control over position, speed and acceleration.
 - Communicate with a PC interface over a serial link (115200 baud) to receive setpoints and return status.
