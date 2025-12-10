@@ -50,14 +50,15 @@ class ConsigneControl(ttk.Frame):
         # --- Option de rotation ---
         self.with_rotation = with_rotation
         if self.with_rotation:
-            self.rot_var = tk.IntVar(value=2)  # default = shortest
-            # Radio buttons: 0=CW, 1=CCW, 2=Shortest
-            self.rb_cw = ttk.Radiobutton(self, text="CW", variable=self.rot_var, value=0)
-            self.rb_ccw = ttk.Radiobutton(self, text="CCW", variable=self.rot_var, value=1)
-            self.rb_shortest = ttk.Radiobutton(self, text="Shortest", variable=self.rot_var, value=2)
-            self.rb_cw.grid(row=0, column=3, padx=5, pady=5)
-            self.rb_ccw.grid(row=0, column=4, padx=5, pady=5)
-            self.rb_shortest.grid(row=0, column=5, padx=5, pady=5)
+            self.rot_var = tk.IntVar(value=0)  # default = shortest
+            # Radio buttons: 0=Shortest, 1=CW, 2=CCW
+            self.rb_shortest = ttk.Radiobutton(self, text="Shortest", variable=self.rot_var, value=0)
+            self.rb_cw = ttk.Radiobutton(self, text="CW", variable=self.rot_var, value=1)
+            self.rb_ccw = ttk.Radiobutton(self, text="CCW", variable=self.rot_var, value=2)
+            self.rb_shortest.grid(row=0, column=3, padx=5, pady=5)
+            self.rb_cw.grid(row=0, column=4, padx=5, pady=5)
+            self.rb_ccw.grid(row=0, column=5, padx=5, pady=5)
+
 
     # ---------- Synchronisation ----------
     def _on_scale_moved(self, event=None):
