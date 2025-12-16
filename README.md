@@ -2,6 +2,13 @@
 
 This repository contains the Arduino firmware for the "Moving Speaker" project (control of two stepper motors to aim a speaker). The main firmware is in `src/main.cpp`.
 
+**Project Website**  
+[View the project on Armand Lesecq's website](https://www.armandlesecq.com/installations/endroits-d-un-lieu)
+
+**Images**  
+![Image 1](https://www.armandlesecq.com/content/4-installations/1-endroits-d-un-lieu/armandlesecq_moving-loudspeaker_hyperdirective-speaker_sound-spatialisation.jpg)  
+![Image 2](https://www.armandlesecq.com/content/4-installations/1-endroits-d-un-lieu/a7401822.jpg)
+
 **Hardware**
 - The firmware is developed and tested for the Arduino Nano platform. 
 

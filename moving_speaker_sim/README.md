@@ -2,6 +2,8 @@
 
 This folder contains a small GUI simulator used to control and monitor the Moving Speaker project from a PC. The simulator connects to the Arduino firmware over a serial link and provides controls to send setpoints and view motor status.
 
+![Main Form](img/moving_speaker_sim_main_form.png)
+
 This README explains how to create a Python virtual environment, install dependencies, and run the simulator on Windows, Linux and macOS. It also documents the command-line options supported by the simulator (`-p/--port` and `-l/--log`).
 
 Requirements
