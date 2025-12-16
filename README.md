@@ -15,6 +15,10 @@ This repository contains the Arduino firmware for the "Moving Speaker" project (
 **Purpose**
 - Drive two stepper motors (A and B) with control over position, speed and acceleration.
 - Communicate with a PC interface over a serial link (115200 baud) to receive setpoints and return status.
+- The motor movement remains always smooth (managed by timer interrupt TIMER1 IRQ)
+- Position and speed setpoints can be sent during movement
+- The acceleration setpoint can be modified (taken into account if the motor is stopped)
+- Motors A and B are managed independently
 
 **Demo**
 You can download demo/demo.mp4 video file
