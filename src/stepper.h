@@ -2,9 +2,7 @@
 #define STEPPER_H
 
 #include <stdint.h>
-#include "timer.h"
-
- 
+#include <cmath>
 
 /**
  * Rotation mode enumeration for stepper movement
@@ -24,22 +22,23 @@ class Stepper
         Setup the stepper motor with specified parameters
         stepPin: GPIO pin for step signal
         dirPin: GPIO pin for direction signal
-        counter: Timer counter to use for ISR timing
+        timerNum: hardware timer number to use for ISR timing
         timerPeriodSec: Timer period in seconds
         steps_per_rev: Number of steps per full revolution
         minPos: Minimum allowed position (steps)
         maxPos: Maximum allowed position (steps)
         */
-        void Setup ( uint8_t stepPin, uint8_t dirPin, 
-                     Counter& counter, double timerPeriodSec,
+        void Setup ( uint8_t stepPin, uint8_t dirPin,
+                     uint8_t timerNum,
+                     double timerPeriodSec,
                      long steps_per_rev,
                      long minPos, long maxPos );
 
         /*
          Run the stepper control logic in the ISR
-         This function is called from the Timer1 compare interrupt
+         This function is called from the ESP32 hardware timer interrupt
         */
-        void RunISR(void);
+        void IRAM_ATTR RunISR(void);
 
         void moveToSteps(long absolute);
         void moveToDeg(double absolute) 
@@ -152,7 +151,8 @@ class Stepper
         // GPIO pins for stepper motor control
         uint8_t _stepPin;         // pin for step signal
         uint8_t _dirPin;          // pin for direction signal
-        Counter* _counter;        // pointer to timer counter for ISR timing
+        uint8_t _timerNum;        // timer number for ISR timing
+        hw_timer_t* _timer = nullptr;        // ESP32 hardware timer for ISR timing
 
         // Position and movement state variables
         volatile long _position = 0;      // current position in steps
@@ -168,7 +168,7 @@ class Stepper
 
         // Timer configuration
         double _timerPeriod = 480e-6;     // timer period in seconds (480 microseconds)
-        uint16_t _timerSet = 120;         // timer counter reload value
+        uint64_t _timerSet = 0;           // timer counter reload value in timer ticks
         
         // Stepper configuration
         long _steps_per_rev = 32000;      // steps per revolution

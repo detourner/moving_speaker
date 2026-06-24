@@ -1,48 +1,35 @@
 #include <Arduino.h>
-#include "timer.h"
 #include "stepper.h"
 
-char myData[64]; // frame buffer for incoming serial packet
-
-CounterA counterA;
-CounterB counterB;
+char myData[200]; // frame buffer for incoming serial packet
 
 Stepper stepperA;
 Stepper stepperB;
+Stepper stepperC;
+Stepper stepperD;
 
 // for debug only
 // volatile unsigned long isrDuration = 0;  // in microseconds
 
-ISR(TIMER1_COMPA_vect)
-{
-  // for debug only, measure ISR duration
-  //unsigned long start = micros();
-  
-  stepperA.RunISR();
-
-  //isrDuration = micros() - start;
-
-}
-
-ISR(TIMER1_COMPB_vect)
-{
-  stepperB.RunISR();
-}
-
-
 void setup()
 {
     Serial.begin(115200);
+    delay(1000); // wait for serial monitor to open
 
-    Counter::Setup(C250kHz);
+    stepperA.Setup(D0, D1, 0, 480e-6,
+                  32000, -8000, 8000);
+    stepperB.Setup(D2, D3, 1, 480e-6,
+                  32000, 0, 32000);
 
-    stepperA.Setup(3, 2, counterA, 480e-6, 
-                  32000, -8000, 8000); 
-    delayMicroseconds(100); // wait a bit to avoid conflict on Timer1 compare A and B
-    stepperB.Setup(5, 4, counterB, 480e-6, 
-                  32000, 0, 32000); 
+    stepperC.Setup(D4, D5, 2, 480e-6,
+                  32000, -8000, 8000);
+    stepperD.Setup(D6, D7, 3, 480e-6,
+                  32000, 0, 32000);
+      
+    
 
-    Serial.println("I: Moving Speaker V1.0 by Détourner");
+
+    Serial.println("I: Moving Speaker V2.0 by Détourner");
     Serial.print("I:");
     Serial.print(stepperA.getMinPositionDeg());
     Serial.print(",");
@@ -56,6 +43,7 @@ void setup()
     Serial.print(",");   
     Serial.print(stepperA.getAccelDegMax());
     Serial.print(",");
+
     Serial.print(stepperB.getMinPositionDeg());
     Serial.print(",");
     Serial.print(stepperB.getMaxPositionDeg());
@@ -66,7 +54,33 @@ void setup()
     Serial.print(",");
     Serial.print(stepperB.getAccelDegMin()); 
     Serial.print(",");   
-    Serial.println(stepperB.getAccelDegMax());
+    Serial.print(stepperB.getAccelDegMax());
+    Serial.print(",");
+
+    Serial.print(stepperC.getMinPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperC.getMaxPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperC.getMaxSpeedDegMin());
+    Serial.print(",");
+    Serial.print(stepperC.getMaxSpeedDegMax());
+    Serial.print(",");
+    Serial.print(stepperC.getAccelDegMin()); 
+    Serial.print(",");   
+    Serial.println(stepperC.getAccelDegMax());
+    Serial.print(",");
+
+    Serial.print(stepperD.getMinPositionDeg()); 
+    Serial.print(",");
+    Serial.print(stepperD.getMaxPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperD.getMaxSpeedDegMin());
+    Serial.print(",");
+    Serial.print(stepperD.getMaxSpeedDegMax());
+    Serial.print(",");
+    Serial.print(stepperD.getAccelDegMin()); 
+    Serial.print(",");
+    Serial.println(stepperD.getAccelDegMax());
     Serial.println("I: Ready");
 }
 
@@ -86,13 +100,30 @@ void loop()
     Serial.print(",");
     Serial.print(stepperA.getSpeedDeg());
     Serial.print(",");
+
     Serial.print(stepperB.isRunning());
     Serial.print(",");    
     Serial.print(stepperB.getPositionModuloDeg());  // position modulo (two decimal places)
     Serial.print(",");
-    Serial.println(stepperB.getSpeedDeg());  
+    Serial.print(stepperB.getSpeedDeg());  
+
+    Serial.print(",");
+    Serial.print(stepperC.isRunning());
+    Serial.print(",");    
+    Serial.print(stepperC.getPositionModuloDeg());  // position modulo (two decimal places)
+    Serial.print(",");
+    Serial.print(stepperC.getSpeedDeg());  
+
+    Serial.print(",");
+    Serial.print(stepperD.isRunning());
+    Serial.print(",");    
+    Serial.print(stepperD.getPositionModuloDeg());  // position modulo (two decimal places)
+    Serial.print(",");
+    Serial.println(stepperD.getSpeedDeg());  
+  
 
     stepperB.renormalizePosition();
+    stepperD.renormalizePosition();
     
   }
 
@@ -100,13 +131,12 @@ void loop()
   {
     byte n = Serial.readBytesUntil('\n', myData, sizeof(myData) - 1);
     myData[n] = '\0'; // null terminator
-
     // Count the number of fields (commas)
     int fieldCount = 0;
     for (byte i = 0; i < n; i++) {
       if (myData[i] == ',') fieldCount++;
     }
-    if (fieldCount != 7-1) { // Expecting 7 fields -> 6 commas
+    if (fieldCount != 14-1) { // Expecting 14 fields -> 13 commas
       Serial.println("E:Invalid frame: wrong number of fields");
       return;
     }
@@ -138,10 +168,37 @@ void loop()
     if (!token) return;
     RotaryMode motB_dir = (RotaryMode)atoi(token);
 
-    
     token = strtok(NULL, ",");
     if (!token) return;
     double motB_accel = atof(token);
+
+    token = strtok(NULL, ",");
+    if (!token) return;
+    double motC_target = atof(token);
+
+    token = strtok(NULL, ",");
+    if (!token) return;
+    double motC_speed = atof(token);
+
+    token = strtok(NULL, ",");
+    if (!token) return;
+    double motC_accel = atof(token);
+
+    token = strtok(NULL, ",");
+    if (!token) return;
+    double motD_target = atof(token);
+
+    token = strtok(NULL, ",");
+    if (!token) return;
+    double motD_speed = atof(token);
+
+    token = strtok(NULL, ",");
+    if (!token) return;
+    RotaryMode motD_dir = (RotaryMode)atoi(token);
+    
+    token = strtok(NULL, ",");
+    if (!token) return;
+    double motD_accel = atof(token);
 
     stepperA.setAccelerationDeg(motA_accel);
     stepperA.setMaxSpeedDeg(motA_speed);
@@ -150,6 +207,14 @@ void loop()
     stepperB.setAccelerationDeg(motB_accel);
     stepperB.setMaxSpeedDeg(motB_speed);
     stepperB.moveToModuloDeg(motB_target, motB_dir);
+
+    stepperC.setAccelerationDeg(motC_accel);
+    stepperC.setMaxSpeedDeg(motC_speed);
+    stepperC.moveToWithLimitsDeg(motC_target);
+
+    stepperD.setAccelerationDeg(motD_accel);
+    stepperD.setMaxSpeedDeg(motD_speed);
+    stepperD.moveToModuloDeg(motD_target, motD_dir);
 
     Serial.print("S: ");
     Serial.print(stepperA.isRunning());
@@ -166,7 +231,25 @@ void loop()
     Serial.print(",");    
     Serial.print(stepperB.getMaxSpeedDeg());
     Serial.print(",");
-    Serial.println(stepperB.getAccelDeg());
+    Serial.print(stepperB.getAccelDeg());
+
+    Serial.print(",");
+    Serial.print(stepperC.isRunning());
+    Serial.print(",");
+    Serial.print(stepperC.getTargetPositionDeg());
+    Serial.print(",");
+    Serial.print(stepperC.getMaxSpeedDeg());
+    Serial.print(",");
+    Serial.print(stepperC.getAccelDeg());
+    Serial.print(",");
+    Serial.print(stepperD.isRunning());
+    Serial.print(",");
+    Serial.print(stepperD.getTargetPositionDeg());
+    Serial.print(",");    
+    Serial.print(stepperD.getMaxSpeedDeg());
+    Serial.print(",");
+    Serial.println(stepperD.getAccelDeg());
+
 
   }
 }

@@ -1,13 +1,28 @@
+#include <Arduino.h>
 #include "stepper.h"
 #include "digitalWriteFast.h"
 
-void Stepper::Setup(uint8_t stepPin, uint8_t dirPin, 
-    Counter& counter, double timerPeriodSec,
+static hw_timer_t* groupTimers[2] = { nullptr, nullptr };
+static Stepper* groupInstances[2][2] = {{ nullptr, nullptr }, { nullptr, nullptr }};
+
+void IRAM_ATTR timerGroupISR0() {
+    if (groupInstances[0][0]) groupInstances[0][0]->RunISR();
+    if (groupInstances[0][1]) groupInstances[0][1]->RunISR();
+}
+
+void IRAM_ATTR timerGroupISR1() {
+    if (groupInstances[1][0]) groupInstances[1][0]->RunISR();
+    if (groupInstances[1][1]) groupInstances[1][1]->RunISR();
+}
+
+void Stepper::Setup(uint8_t stepPin, uint8_t dirPin,
+    uint8_t timerNum,
+    double timerPeriodSec,
     long steps_per_rev, long minPos, long maxPos)
 {
+    _timerNum = timerNum;
     _stepPin = stepPin;
     _dirPin = dirPin;
-    _counter = &counter;
     _steps_per_rev = steps_per_rev;
     _minPos = minPos;
     _maxPos = maxPos;
@@ -16,13 +31,30 @@ void Stepper::Setup(uint8_t stepPin, uint8_t dirPin,
 
     _timerPeriod = timerPeriodSec;
 
-    // Calculate timer counter value for desired period
-    _timerSet =  (_timerPeriod * 1000000.0) / _counter->getTicksPeruSec();
+    // Calculate timer counter value for desired period in microseconds
+    _timerSet = (uint64_t)round(_timerPeriod * 1000000.0);
+    Serial.print("I: Timer period set to ");
+    Serial.println(_timerSet);
     _vmaxMax = 1.0 / _timerPeriod; // one revolution per timer period
     _accelMax = _vmaxMax / _timerPeriod; // reach max speed in one timer period
 
-    _counter->Set(_timerSet);
-    _counter->Enable();
+    uint8_t group = (timerNum < 2) ? 0 : 1;
+    uint8_t indexInGroup = timerNum % 2;
+    uint8_t hwTimer = group; // ESP32 only exposes two hardware timers in this API
+
+    if (!groupTimers[group]) {
+        groupTimers[group] = timerBegin(hwTimer, 80, true);
+        if (groupTimers[group]) {
+            timerAttachInterrupt(groupTimers[group],
+                (group == 0) ? timerGroupISR0 : timerGroupISR1,
+                true);
+            timerAlarmWrite(groupTimers[group], _timerSet, true);
+            timerAlarmEnable(groupTimers[group]);
+        }
+    }
+
+    _timer = groupTimers[group];
+    groupInstances[group][indexInGroup] = this;
 
     pinModeFast(_stepPin, OUTPUT);
     pinModeFast(_dirPin, OUTPUT);
@@ -30,7 +62,6 @@ void Stepper::Setup(uint8_t stepPin, uint8_t dirPin,
 
 void Stepper::RunISR(void)
 {
-    _counter->Set(_timerSet);
     long dist = _targetPos - _position;
     double d = abs(dist);
 
@@ -99,14 +130,14 @@ void Stepper::RunISR(void)
 
             // Generate step pulse
             digitalWriteFast(_stepPin, HIGH);
-            __asm__("nop\nnop\nnop\nnop\nnop\nnop");  // Small CPU delay for step pulse width
+            delayMicroseconds(1); // Ensure minimum pulse width
             digitalWriteFast(_stepPin, LOW);
 
 
             _position = nextPos;
             _accSteps -= stepDir;
         }
-    }
+    }  
 }
 
 /**
@@ -128,10 +159,10 @@ void Stepper::renormalizePosition()
         // Update only if changed
         if(modulo != _position || tgt != _targetPos)
         {
-            cli();
+            noInterrupts();
             _position = modulo;
             _targetPos = tgt;
-            sei();
+            interrupts();
         }
     }
 }
@@ -145,12 +176,12 @@ bool Stepper::homePosition()
     if (_curSpeed != 0.0 || _accSteps != 0.0) 
         return false; // cannot home while moving
     
-    cli();
+    noInterrupts();
     _position = 0;
     _targetPos = 0;
     _curSpeed = 0.0;
     _accSteps = 0.0;
-    sei();
+    interrupts();
     return true;
 }
 

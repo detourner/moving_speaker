@@ -13,7 +13,7 @@ import MotorDisplayControl as MotorDisplayControl
 
 class SerialReader:
     """Handles serial communication with the Arduino and optional logging."""
-    def __init__(self, port='COM3', baudrate=115200, data_queue=None, log_path=None):
+    def __init__(self, port='COM4', baudrate=115200, data_queue=None, log_path=None):
         self.port = port
         self.baudrate = baudrate
         self.data_queue = data_queue if data_queue else queue.Queue()
@@ -91,17 +91,25 @@ class SerialReader:
                     if line.startswith('P:'):
                         data = line[2:]
                         parts = data.split(',')
-                        if len(parts) == 6:
+                        if len(parts) == 12:
                             try:
                                 motor_data = {
                                     'moving_a': bool(int(parts[0])),
                                     'position_a': float(parts[1]),
                                     'speed_a': float(parts[2]),
+
                                     'moving_b': bool(int(parts[3])),
                                     'position_b': float(parts[4]),
-                                    'speed_b': float(parts[5])
+                                    'speed_b': float(parts[5]),
+
+                                    'moving_c': bool(int(parts[6])),  
+                                    'position_c': float(parts[7]),
+                                    'speed_c': float(parts[8]),
+
+                                    'moving_d': bool(int(parts[9])),
+                                    'position_d': float(parts[10]),
+                                    'speed_d': float(parts[11])
                                 }
-                                # put parsed motor data into the queue for the UI
                                 self.data_queue.put(motor_data)
                             except ValueError:
                                 print(f"Parsing error: {line}")
@@ -113,7 +121,7 @@ class SerialReader:
 
 
 class MotorHeadUI:
-    def __init__(self, root, serial_port='COM3', log_path=None):
+    def __init__(self, root, serial_port='COM4', log_path=None):
         self.root = root
         self.root.title("Moving Speaker Sim V1.0")
         self.style = ttk.Style("flatly")
@@ -121,10 +129,16 @@ class MotorHeadUI:
         # Simulated / received values
         self.position_a = 0
         self.position_b = 0
+        self.position_c = 0
+        self.position_d = 0
         self.moving_a = False
         self.moving_b = False
+        self.moving_c = False
+        self.moving_d = False
         self.speed_a = 0
         self.speed_b = 0
+        self.speed_c = 0
+        self.speed_d = 0
 
         # Serial initialization
         self.data_queue = queue.Queue()
@@ -151,6 +165,10 @@ class MotorHeadUI:
         self.motorADisp.pack(side=LEFT, padx=20)
         self.motorBDisp = MotorDisplayControl.MotorDisplayControl(meters_frame, title_text="Motor B Position [°]", initial_value=0.0)
         self.motorBDisp.pack(side=LEFT, padx=20)
+        self.motorCDisp = MotorDisplayControl.MotorDisplayControl(meters_frame, title_text="Motor C Position [°]", initial_value=0.0)
+        self.motorCDisp.pack(side=LEFT, padx=20)
+        self.motorDDisp = MotorDisplayControl.MotorDisplayControl(meters_frame, title_text="Motor D Position [°]", initial_value=0.0)
+        self.motorDDisp.pack(side=LEFT, padx=20)
         
 
        
@@ -176,6 +194,24 @@ class MotorHeadUI:
 
         self.motB_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Accel", min_val=1.1, max_val=113, initial=50, step = 0.1)
         self.motB_accel.pack(fill="x", padx=10, pady=10)
+
+        self.motC_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot C Position [°]", min_val=-90, max_val=90, initial=0, step = 0.01)
+        self.motC_target.pack(fill="x", padx=10, pady=10)
+
+        self.motC_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot C Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
+        self.motC_speed.pack(fill="x", padx=10, pady=10)
+
+        self.motC_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot C Accell", min_val=1.1, max_val=113, initial=50, step = 0.1)
+        self.motC_accel.pack(fill="x", padx=10, pady=10)
+
+        self.motD_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot D Position [°]", min_val=0, max_val=359.99, initial=0, with_rotation=True, step=0.01)
+        self.motD_target.pack(fill="x", padx=10, pady=10)
+
+        self.motD_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot D Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
+        self.motD_speed.pack(fill="x", padx=10, pady=10)
+
+        self.motD_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot D Accel", min_val=1.1, max_val=113, initial=50, step = 0.1)
+        self.motD_accel.pack(fill="x", padx=10, pady=10)
 
 
        
@@ -203,15 +239,24 @@ class MotorHeadUI:
         mBs = float(self.motB_speed.get())
         mBd = int(self.motB_target.getDirection())  # direction de rotation
         mBa = float(self.motB_accel.get())
-       
-        
-        # Format: motA_target,motA_speed,motA_accel,motB_target,motB_speed,motB_dir,motB_accel
-        command = f"{mAt},{mAs},{mAa},{mBt},{mBs},{mBd},{mBa}"
+
+        mCt = float(self.motC_target.get())
+        mCs = float(self.motC_speed.get())
+        mCa = float(self.motC_accel.get())
+
+        mDt = float(self.motD_target.get())
+        mDs = float(self.motD_speed.get())
+        mDd = int(self.motD_target.getDirection())  # direction de rotation
+        mDa = float(self.motD_accel.get())
+
+        # Format: motA_target,motA_speed,motA_accel,motB_target,motB_speed,motB_dir,motB_accel,
+        #         motC_target,motC_speed,motC_accel,motD_target,motD_speed,motD_dir,motD_accel
+        command = f"{mAt},{mAs},{mAa},{mBt},{mBs},{mBd},{mBa},{mCt},{mCs},{mCa},{mDt},{mDs},{mDd},{mDa}"
         if self.serial_connected:
             if self.serial_reader.write_command(command):
                 # Use correct accel variables and reasonable decimal precision for display
                 self.lbl_target.config(
-                    text=f"✓ Consignes envoyées → MotA: {mAt:.2f}° @{mAs:.2f}/{mAa:.2f} | MotB: {mBt:.2f}° @{mBs:.2f} Dir:{mBd} / {mBa:.2f}",
+                    text=f"✓ Consignes envoyées → MotA: {mAt:.2f}° @{mAs:.2f}/{mAa:.2f} | MotB: {mBt:.2f}° @{mBs:.2f} Dir:{mBd} / {mBa:.2f} | MotC: {mCt:.2f}° @{mCs:.2f}/{mCa:.2f} | MotD: {mDt:.2f}° @{mDs:.2f} Dir:{mDd} / {mDa:.2f}",
                     foreground="green"
                 )
             else:
@@ -229,35 +274,47 @@ class MotorHeadUI:
                 motor_data = self.data_queue.get_nowait()
                 self.moving_a = motor_data['moving_a']
                 self.moving_b = motor_data['moving_b']
+                self.moving_c = motor_data['moving_c']
+                self.moving_d = motor_data['moving_d']
                 self.position_a = motor_data['position_a']
                 self.position_b = motor_data['position_b']
+                self.position_c = motor_data['position_c']
+                self.position_d = motor_data['position_d']
                 self.speed_a = motor_data['speed_a']
                 self.speed_b = motor_data['speed_b']
-                
+                self.speed_c = motor_data['speed_c']
+                self.speed_d = motor_data['speed_d']
+
         except queue.Empty:
             pass
         
         # Update meter widgets
         self.motorADisp.update_position(self.position_a)
         self.motorBDisp.update_position(self.position_b)
+        self.motorCDisp.update_position(self.position_c)
+        self.motorDDisp.update_position(self.position_d)
         self.motorADisp.update_speed(self.speed_a)  
         self.motorBDisp.update_speed(self.speed_b) 
+        self.motorCDisp.update_speed(self.speed_c) 
+        self.motorDDisp.update_speed(self.speed_d) 
         self.motorADisp.update_moving(self.moving_a)
         self.motorBDisp.update_moving(self.moving_b)
+        self.motorCDisp.update_moving(self.moving_c)
+        self.motorDDisp.update_moving(self.moving_d)
 
         # update every ans 50ms
         self.root.after(50, self.update_values)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Motor Head UI (serial port optional)")
-    parser.add_argument("-p", "--port", dest="serial_port", default="COM3",
-                        help="Serial port to connect to (default: COM3)")
+    parser.add_argument("-p", "--port", dest="serial_port", default="COM4",
+                        help="Serial port to connect to (default: COM4)")
     parser.add_argument("-l", "--log", dest="log", default=None,
                         help="Optional path to a log file. If provided, all sent/received frames are appended to this file.")
     args = parser.parse_args()
 
     root = ttk.Window(themename="flatly")
-    # Use provided serial port or default to COM3
+    # Use provided serial port or default to COM4
     app = MotorHeadUI(root, serial_port=args.serial_port, log_path=args.log)
     
     def on_closing():
