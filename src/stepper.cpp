@@ -43,13 +43,12 @@ void Stepper::Setup(uint8_t stepPin, uint8_t dirPin,
     uint8_t hwTimer = group; // ESP32 only exposes two hardware timers in this API
 
     if (!groupTimers[group]) {
-        groupTimers[group] = timerBegin(hwTimer, 80, true);
+        groupTimers[group] = timerBegin(1000000);
         if (groupTimers[group]) {
             timerAttachInterrupt(groupTimers[group],
-                (group == 0) ? timerGroupISR0 : timerGroupISR1,
-                true);
-            timerAlarmWrite(groupTimers[group], _timerSet, true);
-            timerAlarmEnable(groupTimers[group]);
+                (group == 0) ? timerGroupISR0 : timerGroupISR1);
+            timerAlarm(groupTimers[group], _timerSet, true, 0);
+            timerStart(groupTimers[group]);
         }
     }
 
