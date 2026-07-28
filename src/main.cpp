@@ -19,12 +19,12 @@ void setup()
     stepperA.Setup(D0, D1, 0, 480e-6,
                   32000, -8000, 8000);
     stepperB.Setup(D2, D3, 1, 480e-6,
-                  32000, 0, 32000);
+                  8000, 0, 8000);
 
     stepperC.Setup(D4, D5, 2, 480e-6,
                   32000, -8000, 8000);
-    stepperD.Setup(D6, D7, 3, 480e-6,
-                  32000, 0, 32000);
+    stepperD.Setup(D7, D8, 3, 480e-6,
+                  16000, 0, 16000);
       
     
 

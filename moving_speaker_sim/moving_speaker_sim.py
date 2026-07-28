@@ -189,7 +189,7 @@ class MotorHeadUI:
         self.motB_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Position [°]", min_val=0, max_val=359.99, initial=0, with_rotation=True, step=0.01)
         self.motB_target.pack(fill="x", padx=10, pady=10)
 
-        self.motB_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
+        self.motB_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Vitesse", min_val=0.01, max_val=46, initial=17, step = 0.01)
         self.motB_speed.pack(fill="x", padx=10, pady=10)
 
         self.motB_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot B Accel", min_val=1.1, max_val=113, initial=50, step = 0.1)
@@ -207,7 +207,7 @@ class MotorHeadUI:
         self.motD_target = ConsigneControl.ConsigneControl(sliders_frame, label="mot D Position [°]", min_val=0, max_val=359.99, initial=0, with_rotation=True, step=0.01)
         self.motD_target.pack(fill="x", padx=10, pady=10)
 
-        self.motD_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot D Vitesse", min_val=0.01, max_val=23, initial=17, step = 0.01)
+        self.motD_speed = ConsigneControl.ConsigneControl(sliders_frame, label="mot D Vitesse", min_val=0.01, max_val=46, initial=17, step = 0.01)
         self.motD_speed.pack(fill="x", padx=10, pady=10)
 
         self.motD_accel = ConsigneControl.ConsigneControl(sliders_frame, label="mot D Accel", min_val=1.1, max_val=113, initial=50, step = 0.1)
