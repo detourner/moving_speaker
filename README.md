@@ -133,7 +133,12 @@ After reception the Arduino applies the parameters and replies with an `S:` fram
 - Accelerations: degrees per second squared (°/s²).
 
 ---
-**Build & deploy (PlatformIO)**
+**Build & deploy**
+
+You can build the firmware in two ways:
+
+1) Native PlatformIO on your machine
+
 Prerequisites: PlatformIO installed (for example via the VS Code PlatformIO extension) and the board connected.
 
 - Build:
@@ -150,6 +155,53 @@ platformio run --target upload
 - Open the serial monitor (115200 baud):
 ```powershell
 platformio device monitor -b 115200
+```
+
+2) Dockerized build (recommended for reproducibility)
+
+Use the helper script:
+
+- Build (auto-creates image if missing):
+```bat
+docker\platformio-docker.bat
+```
+or
+```bat
+docker\platformio-docker.bat build
+```
+
+- Show PlatformIO environment details:
+```bat
+docker\platformio-docker.bat env
+```
+
+- Force a full rebuild of image and clean PlatformIO cache:
+```bat
+docker\platformio-docker.bat rebuild
+```
+
+- Clean only the PlatformIO cache volume:
+```bat
+docker\platformio-docker.bat cache-clean
+```
+
+Archive and restore image + cache:
+
+- Create both archives:
+```bat
+docker\platformio-docker.bat archive
+```
+This creates two files in the `docker` folder:
+- `...-image.tar` (Docker image)
+- `...-cache.tar` (PlatformIO cache volume)
+
+- Restore from archive:
+```bat
+docker\platformio-docker.bat load-archive C:\path\to\your-image.tar
+```
+If the matching `...-cache.tar` is present next to the image archive, it is restored automatically. You can also pass it explicitly:
+```bat
+docker\platformio-docker.bat load-archive C:\path\to\your-image.tar C:\path\to\your-cache.tar
 ```
 
 ---

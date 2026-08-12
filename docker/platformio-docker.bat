@@ -101,10 +101,12 @@ echo [container-clean] Image removed.
 goto end
 
 :do_archive
-rem Create a timestamped archive from the current image.
+rem Create timestamped archives for both image and cache volume.
 set "TS=%date:~6,4%%date:~3,2%%date:~0,2%-%time:~0,2%%time:~3,2%%time:~6,2%"
 set "TS=%TS: =0%"
-set "ARCHIVE_FILE=%WORKSPACE_DIR%\docker\%IMAGE::=-%-%TS%.tar"
+set "ARCHIVE_BASE=%WORKSPACE_DIR%\docker\%IMAGE::=-%-%TS%"
+set "ARCHIVE_IMAGE_FILE=%ARCHIVE_BASE%-image.tar"
+set "ARCHIVE_CACHE_FILE=%ARCHIVE_BASE%-cache.tar"
 
 echo [archive] Checking image %IMAGE%...
 docker image inspect %IMAGE% >nul 2>&1
@@ -113,21 +115,26 @@ if errorlevel 1 (
     goto end
 )
 
-echo [archive] Saving image to "%ARCHIVE_FILE%"...
-docker save -o "%ARCHIVE_FILE%" %IMAGE%
+echo [archive] Saving image to "%ARCHIVE_IMAGE_FILE%"...
+docker save -o "%ARCHIVE_IMAGE_FILE%" %IMAGE%
 set "ARCHIVE_RC=%ERRORLEVEL%"
 
-if "%ARCHIVE_RC%"=="0" (
-    echo [archive] Archive created: "%ARCHIVE_FILE%"
-) else (
+if not "%ARCHIVE_RC%"=="0" (
     echo [archive] Archive save failed.
+    goto end
 )
+
+call :archive_cache_volume "%ARCHIVE_CACHE_FILE%"
+if errorlevel 1 goto end
+
+echo [archive] Image archive created: "%ARCHIVE_IMAGE_FILE%"
+echo [archive] Cache archive created: "%ARCHIVE_CACHE_FILE%"
 goto end
 
 :do_load_archive
-rem Load image archive produced by docker save/export.
+rem Load image archive and optionally restore cache volume archive.
 if "%~2"=="" (
-    echo Usage: build.bat load-archive ^<file.tar^>
+    echo Usage: build.bat load-archive ^<image.tar^> [cache.tar]
     goto end
 )
 
@@ -157,6 +164,20 @@ if errorlevel 1 (
 )
 
 echo [load-archive] Archive loaded, build image available: %IMAGE%.
+
+set "CACHE_ARCHIVE_INPUT=%~f3"
+if "%CACHE_ARCHIVE_INPUT%"=="" (
+    set "CACHE_ARCHIVE_INPUT=%ARCHIVE_INPUT:-image.tar=-cache.tar%"
+)
+
+if exist "%CACHE_ARCHIVE_INPUT%" (
+    call :restore_cache_volume "%CACHE_ARCHIVE_INPUT%"
+    if errorlevel 1 goto end
+    echo [load-archive] Cache archive restored: "%CACHE_ARCHIVE_INPUT%"
+) else (
+    echo [load-archive] Cache archive not found, skipped: "%CACHE_ARCHIVE_INPUT%"
+)
+
 goto end
 
 :do_help
@@ -169,11 +190,57 @@ echo shell            : open a shell in the container
 echo rebuild          : clean PlatformIO cache + rebuild Docker image
 echo cache-clean      : clean the Docker volume used for PlatformIO cache
 echo container-clean  : remove build-image containers and the build image
-echo archive          : save Docker image to a .tar archive
-echo load-archive     : load a .tar archive and use it for build
+echo archive          : save Docker image + PlatformIO cache volume to .tar archives
+echo load-archive     : load image archive and optional cache archive
 echo help             : show this help
 
 goto end
+
+:archive_cache_volume
+set "CACHE_ARCHIVE_TARGET=%~f1"
+
+rem Ensure cache volume exists so archive command is deterministic.
+docker volume inspect "%PIO_CACHE_VOLUME%" >nul 2>&1
+if errorlevel 1 (
+    echo [archive] Cache volume not found, creating empty volume: "%PIO_CACHE_VOLUME%"
+    docker volume create "%PIO_CACHE_VOLUME%" >nul
+    if errorlevel 1 (
+        echo Failed: could not create cache volume "%PIO_CACHE_VOLUME%".
+        exit /b 1
+    )
+)
+
+echo [archive] Saving cache volume to "%CACHE_ARCHIVE_TARGET%"...
+docker run --rm -v "%PIO_CACHE_VOLUME%:/cache" alpine:3.20 sh -c "cd /cache && tar -cf - ." > "%CACHE_ARCHIVE_TARGET%"
+if errorlevel 1 (
+    echo Failed: could not archive cache volume "%PIO_CACHE_VOLUME%".
+    exit /b 1
+)
+
+exit /b 0
+
+:restore_cache_volume
+set "CACHE_ARCHIVE_SOURCE=%~f1"
+
+if not exist "%CACHE_ARCHIVE_SOURCE%" (
+    echo Failed: cache archive not found: "%CACHE_ARCHIVE_SOURCE%"
+    exit /b 1
+)
+
+docker volume create "%PIO_CACHE_VOLUME%" >nul
+if errorlevel 1 (
+    echo Failed: could not create cache volume "%PIO_CACHE_VOLUME%".
+    exit /b 1
+)
+
+echo [load-archive] Restoring cache volume from "%CACHE_ARCHIVE_SOURCE%"...
+docker run --rm -i -v "%PIO_CACHE_VOLUME%:/cache" alpine:3.20 sh -c "rm -rf /cache/* /cache/.[!.]* /cache/..?* 2>/dev/null; cd /cache && tar -xf -" < "%CACHE_ARCHIVE_SOURCE%"
+if errorlevel 1 (
+    echo Failed: could not restore cache volume "%PIO_CACHE_VOLUME%".
+    exit /b 1
+)
+
+exit /b 0
 
 :set_image_name
 rem Derive a unique identity from git remote when available.
