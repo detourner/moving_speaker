@@ -11,24 +11,9 @@ Stepper stepperD;
 // for debug only
 // volatile unsigned long isrDuration = 0;  // in microseconds
 
-void setup()
+// emits the "I:" info/capabilities frame, at boot and on demand ('I' request)
+void printInfoFrame()
 {
-    Serial.begin(115200);
-    delay(1000); // wait for serial monitor to open
-
-    stepperA.Setup(D0, D1, 0, 480e-6,
-                  32000, -8000, 8000);
-    stepperB.Setup(D2, D3, 1, 480e-6,
-                  8000, 0, 8000);
-
-    stepperC.Setup(D4, D5, 2, 480e-6,
-                  32000, -8000, 8000);
-    stepperD.Setup(D7, D8, 3, 480e-6,
-                  16000, 0, 16000);
-      
-    
-
-
     Serial.println("I: Moving Speaker V2.0 by Détourner");
     Serial.print("I:");
     Serial.print(stepperA.getMinPositionDeg());
@@ -84,6 +69,24 @@ void setup()
     Serial.println("I: Ready");
 }
 
+void setup()
+{
+    Serial.begin(115200);
+    delay(1000); // wait for serial monitor to open
+
+    stepperA.Setup(D0, D1, 0, 480e-6,
+                  32000, -8000, 8000);
+    stepperB.Setup(D2, D3, 1, 480e-6,
+                  8000, 0, 8000);
+
+    stepperC.Setup(D4, D5, 2, 480e-6,
+                  32000, -8000, 8000);
+    stepperD.Setup(D7, D8, 3, 480e-6,
+                  16000, 0, 16000);
+
+    printInfoFrame();
+}
+
 void loop()
 {
 
@@ -131,6 +134,12 @@ void loop()
   {
     byte n = Serial.readBytesUntil('\n', myData, sizeof(myData) - 1);
     myData[n] = '\0'; // null terminator
+
+    if (n == 1 && myData[0] == 'I') { // 'I' request: re-emit the info frame on demand
+      printInfoFrame();
+      return;
+    }
+
     // Count the number of fields (commas)
     int fieldCount = 0;
     for (byte i = 0; i < n; i++) {
@@ -217,6 +226,7 @@ void loop()
     stepperD.setMaxSpeedDeg(motD_speed);
     stepperD.moveToModuloDeg(motD_target, motD_dir);
 
+
     Serial.print("S: ");
     Serial.print(stepperA.isRunning());
     Serial.print(",");
@@ -250,7 +260,6 @@ void loop()
     Serial.print(stepperD.getMaxSpeedDeg());
     Serial.print(",");
     Serial.println(stepperD.getAccelDeg());
-
 
   }
 }

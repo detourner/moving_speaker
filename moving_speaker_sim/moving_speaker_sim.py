@@ -162,9 +162,9 @@ class PanTiltWidget(QWidget):
         self.setMinimumSize(280, 280)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self._current_pan  = 180.0
+        self._current_pan  = 0.0
         self._current_tilt = 0.0
-        self._target_pan   = 180.0
+        self._target_pan   = 0.0
         self._target_tilt  = 0.0
         self._dragging     = False
 
@@ -496,10 +496,10 @@ class MotorHeadUI(QMainWindow):
         # Multi-turn absolute tracking for Motor B (Pan) and D
         self._pan_b_abs  = 0.0
         self._pan_b_prev = 0.0
-        self._tgt_b_abs  = 180.0   # matches widget initial _target_pan = 180°
+        self._tgt_b_abs  = 0.0   # matches widget initial _target_pan = 0°
         self._pan_d_abs  = 0.0
         self._pan_d_prev = 0.0
-        self._tgt_d_abs  = 180.0   # matches widget initial _target_pan = 180°
+        self._tgt_d_abs  = 0.0   # matches widget initial _target_pan = 0°
 
         # Serial
         self.data_queue = queue.Queue()
@@ -621,6 +621,31 @@ class MotorHeadUI(QMainWindow):
             "QPushButton:hover{background:#3a2a5a;color:#ffffff;}"
         )
         outer.addWidget(reset_btn)
+
+        quick_style = (
+            "QPushButton{background:#1a1a3a;color:#88aaff;border:1px solid #445588;"
+            "border-radius:4px;padding:2px 6px;font-family:Courier;font-size:10px;}"
+            "QPushButton:hover{background:#2a2a4a;color:#ffffff;}"
+        )
+
+        pan_row = QHBoxLayout()
+        pan_row.setSpacing(4)
+        for pan_val in (0, 90, 180, 270):
+            btn = QPushButton(f"Pan {pan_val}\u00b0")
+            btn.setStyleSheet(quick_style)
+            btn.clicked.connect(lambda _=False, _n=n, _p=float(pan_val): self._quick_set_target(_n, pan=_p))
+            pan_row.addWidget(btn)
+        outer.addLayout(pan_row)
+
+        tilt_row = QHBoxLayout()
+        tilt_row.setSpacing(4)
+        for tilt_val in (0, 45, -45, 90, -90):
+            btn = QPushButton(f"Tilt {tilt_val}\u00b0")
+            btn.setStyleSheet(quick_style)
+            btn.clicked.connect(lambda _=False, _n=n, _t=float(tilt_val): self._quick_set_target(_n, tilt=_t))
+            tilt_row.addWidget(btn)
+        outer.addLayout(tilt_row)
+
         bottom = QWidget()
         bottom.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         bl = QHBoxLayout(bottom)
@@ -814,19 +839,28 @@ class MotorHeadUI(QMainWindow):
         return tab
 
     def _reset_target(self, n):
+        self._quick_set_target(n, pan=0.0, tilt=0.0)
+
+    def _quick_set_target(self, n, pan=None, tilt=None):
+        """Set the target pan and/or tilt of panel n, leaving the other axis unchanged."""
+        widget = getattr(self, f"_pt_{n}_widget")
+        if pan is None:
+            pan = widget._target_pan
+        if tilt is None:
+            tilt = widget._target_tilt
         mode_map = {0: "short", 1: "cw", 2: "ccw"}
         mode = mode_map.get(getattr(self, f"_traj_grp_{n}").checkedId(), "short")
         pan_abs = self._pan_b_abs if n == 1 else self._pan_d_abs
-        new_abs = compute_target_pan(pan_abs, 0.0, mode)
+        new_abs = compute_target_pan(pan_abs, pan, mode)
         if n == 1:
             self._tgt_b_abs = new_abs
         else:
             self._tgt_d_abs = new_abs
-        getattr(self, f"_pt_{n}_widget").set_target_display(0.0, 0.0)
+        widget.set_target_display(pan, tilt)
         self._refresh_pt_labels(n)
         if n == 1 and self._sync_cb.isChecked():
-            self._tgt_d_abs = compute_target_pan(self._pan_d_abs, 0.0, mode)
-            self._pt_2_widget.set_target_display(0.0, 0.0)
+            self._tgt_d_abs = compute_target_pan(self._pan_d_abs, pan, mode)
+            self._pt_2_widget.set_target_display(pan, tilt)
             self._refresh_pt_labels(2)
 
     # ── Slot: sync toggle ───────────────────────────────────────────────
