@@ -67,7 +67,7 @@ void setup()
     Serial.print(",");
     Serial.print(stepperC.getAccelDegMin()); 
     Serial.print(",");   
-    Serial.println(stepperC.getAccelDegMax());
+    Serial.print(stepperC.getAccelDegMax());
     Serial.print(",");
 
     Serial.print(stepperD.getMinPositionDeg()); 
@@ -93,7 +93,7 @@ void loop()
   {
     updateSendSerial = millis();
 
-    Serial.print("P:");
+    Serial.print("P: ");
     Serial.print(stepperA.isRunning());
     Serial.print(",");    
     Serial.print(stepperA.getPositionDeg());  // position (two decimal places)
@@ -110,7 +110,7 @@ void loop()
     Serial.print(",");
     Serial.print(stepperC.isRunning());
     Serial.print(",");    
-    Serial.print(stepperC.getPositionModuloDeg());  // position modulo (two decimal places)
+    Serial.print(stepperC.getPositionDeg());  // position (two decimal places), consistent with A
     Serial.print(",");
     Serial.print(stepperC.getSpeedDeg());  
 
@@ -143,7 +143,8 @@ void loop()
 
     // Extract fields
     // Frame format expected (comma separated):
-    // motA_target, motA_speed, motA_accel, motB_target, motB_speed, motB_dir, motB_accel
+    // motA_target, motA_speed, motA_accel, motB_target, motB_speed, motB_dir, motB_accel,
+    // motC_target, motC_speed, motC_accel, motD_target, motD_speed, motD_dir, motD_accel
     char* token = strtok(myData, ",");
     if (!token) return;
     double motA_target = atof(token);

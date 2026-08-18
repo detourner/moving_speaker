@@ -35,12 +35,11 @@ void Stepper::Setup(uint8_t stepPin, uint8_t dirPin,
     _timerSet = (uint64_t)round(_timerPeriod * 1000000.0);
     Serial.print("I: Timer period set to ");
     Serial.println(_timerSet);
-    _vmaxMax = 1.0 / _timerPeriod; // one revolution per timer period
+    _vmaxMax = 1.0 / _timerPeriod; // one step per timer period
     _accelMax = _vmaxMax / _timerPeriod; // reach max speed in one timer period
 
     uint8_t group = (timerNum < 2) ? 0 : 1;
     uint8_t indexInGroup = timerNum % 2;
-    uint8_t hwTimer = group; // ESP32 only exposes two hardware timers in this API
 
     if (!groupTimers[group]) {
         groupTimers[group] = timerBegin(1000000);
@@ -108,19 +107,20 @@ void Stepper::RunISR(void)
     if (_accSteps >= 1.0 || _accSteps <= -1.0) {
         int stepDir = (_accSteps > 0 ? 1 : -1);
         long nextPos = _position + stepDir;
+        bool reachedOrPast = (stepDir > 0 && nextPos >= _targetPos) ||
+                              (stepDir < 0 && nextPos <= _targetPos);
 
-        if ((stepDir > 0 && nextPos >= _targetPos) ||
-            (stepDir < 0 && nextPos <= _targetPos)) {
-            if(_reversing == false) 
-            {
-                // only update position if not reversing, because in that case 
-                //the speed target is set to zero but position is not yet reached
-                _position = _targetPos;
-            }
+        // While reversing, the old target is about to be replaced by
+        // _targetDuringReverse: never step towards it, just let speed decay to 0
+        if (_reversing && reachedOrPast) {
+            _accSteps = 0;
+            _curSpeed = 0;
+        } else if (!_reversing && (stepDir > 0 ? nextPos > _targetPos : nextPos < _targetPos)) {
+            // Would overshoot the target: clamp without stepping
+            _position = _targetPos;
             _accSteps = 0;
             _curSpeed = 0;
         } else {
-
             // Set direction pin
             if (stepDir > 0) 
                 digitalWriteFast(_dirPin, HIGH);
@@ -132,9 +132,14 @@ void Stepper::RunISR(void)
             delayMicroseconds(1); // Ensure minimum pulse width
             digitalWriteFast(_stepPin, LOW);
 
-
             _position = nextPos;
             _accSteps -= stepDir;
+
+            // Landed exactly on target: stop cleanly
+            if (!_reversing && reachedOrPast) {
+                _accSteps = 0;
+                _curSpeed = 0;
+            }
         }
     }  
 }
@@ -190,10 +195,9 @@ bool Stepper::homePosition()
  */
 void Stepper::moveToModuloSteps(long targetModulo, RotaryMode mode)
 {
-    if( targetModulo > _maxPos) targetModulo = _maxPos;
-    if( targetModulo < _minPos) targetModulo = _minPos;
-    
-    // Normalize target to range [0, steps_per_rev)
+    // Normalize target to range [0, steps_per_rev) first: clamping to min/max
+    // before wrapping would crush any out-of-range value (e.g. negative degrees)
+    // to a bound instead of correctly wrapping it around the circle.
     targetModulo %= _steps_per_rev;
     if (targetModulo < 0) targetModulo += _steps_per_rev;
 
