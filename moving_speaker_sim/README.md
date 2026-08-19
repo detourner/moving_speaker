@@ -2,7 +2,7 @@
 
 This folder contains a small GUI simulator used to control and monitor the Moving Speaker project from a PC. The simulator connects to the Arduino firmware over a serial link and provides controls to send setpoints and view motor status.
 
-This README explains how to create a Python virtual environment, install dependencies, and run the simulator on Windows, Linux and macOS. It also documents the command-line options supported by the simulator (`-p/--port` and `-l/--log`).
+This README explains how to create a Python virtual environment, install dependencies, and run the simulator on Windows, Linux and macOS. It also documents the command-line options supported by the simulator (`-p/--port`, `-l/--log` and `-s/--scenario`).
 
 Requirements
 - Python 3.8 or later
@@ -68,6 +68,31 @@ python moving_speaker_sim.py -p /dev/ttyUSB0
 # Use macOS device
 python moving_speaker_sim.py -p /dev/tty.usbserial-FT123
 ```
+
+Run a movement scenario
+
+A scenario file contains one 14-field `esp32_4m` CSV command per line. Blank lines
+and lines beginning with `#` are ignored. Use `wait <seconds>` between commands
+to let the motors move before the next setpoint is sent:
+
+```text
+0,20,50,0,20,0,50,0,20,50,0,20,0,50
+wait 5
+0,20,50,180,20,0,50,0,20,50,180,20,0,50
+```
+
+The scenario runs in the GUI event loop, so serial monitoring and position updates
+continue while it is executing:
+
+```powershell
+python moving_speaker_sim.py -p COM4 -s scenario_symmetric.txt -l scenario.log
+```
+
+Generated scenarios:
+
+- `scenario_symmetric.txt` — identical B/D reference movements.
+- `scenario_reversals.txt` — repeated pan direction changes.
+- `scenario_speed_stress.txt` — conservative settings followed by higher speed.
 
 Enable logging to file
 

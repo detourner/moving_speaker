@@ -5,6 +5,7 @@ import threading
 import queue
 import argparse
 import datetime
+import pathlib
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
@@ -28,7 +29,7 @@ class SerialReader:
         self.serial_connection = None
         self.log_path = log_path
         self.log_fh = None
-        if self.log_path:
+        if log_path:
             try:
                 self.log_fh = open(self.log_path, "a", encoding="utf-8")
             except Exception as e:
@@ -480,7 +481,7 @@ QStatusBar{background:#1a1a2e;color:#666688;font-family:Courier;font-size:10px;}
 
 class MotorHeadUI(QMainWindow):
 
-    def __init__(self, serial_port="COM4", log_path=None):
+    def __init__(self, serial_port="COM4", log_path=None, scenario_path=None):
         super().__init__()
         self.setWindowTitle("Moving Speaker Sim V2.0")
         self.resize(1150, 800)
@@ -526,8 +527,60 @@ class MotorHeadUI(QMainWindow):
         self._timer = QTimer()
         self._timer.timeout.connect(self._update_values)
         self._timer.start(50)
+        self._scenario_steps = []
+        self._scenario_index = 0
+        self._scenario_timer = QTimer(self)
+        self._scenario_timer.setSingleShot(True)
+        self._scenario_timer.timeout.connect(self._run_next_scenario_step)
+        if scenario_path:
+            self._load_scenario(scenario_path)
 
     # ── UI builder ────────────────────────────────────────────────────────────
+
+    def _load_scenario(self, scenario_path):
+        try:
+            path = pathlib.Path(scenario_path)
+            steps = []
+            for line_number, raw_line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), 1
+            ):
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.lower().startswith("wait "):
+                    try:
+                        delay = float(line.split(None, 1)[1])
+                    except (IndexError, ValueError):
+                        raise ValueError(f"line {line_number}: wait expects seconds")
+                    if delay < 0:
+                        raise ValueError(f"line {line_number}: wait cannot be negative")
+                    steps.append(("wait", delay))
+                    continue
+                if len(line.split(",")) != 14:
+                    raise ValueError(
+                        f"line {line_number}: movement command must have 14 fields"
+                    )
+                steps.append(("command", line))
+        except (OSError, ValueError) as error:
+            raise RuntimeError(
+                f"Unable to load scenario '{scenario_path}': {error}"
+            ) from error
+
+        self._scenario_steps = steps
+        print(f"Loaded scenario {scenario_path}: {len(steps)} steps")
+        QTimer.singleShot(0, self._run_next_scenario_step)
+
+    def _run_next_scenario_step(self):
+        if self._scenario_index >= len(self._scenario_steps):
+            print("Scenario complete")
+            return
+        kind, value = self._scenario_steps[self._scenario_index]
+        self._scenario_index += 1
+        if kind == "command":
+            self.serial_reader.write_command(value)
+            self._scenario_timer.start(1)
+        else:
+            self._scenario_timer.start(max(1, round(value * 1000)))
 
     def _build_ui(self):
         central = QWidget()
@@ -1071,6 +1124,7 @@ class MotorHeadUI(QMainWindow):
     def closeEvent(self, event):
         self._timer.stop()
         self._auto_send_timer.stop()
+        self._scenario_timer.stop()
         if self.serial_connected:
             self.serial_reader.disconnect()
         event.accept()
@@ -1082,10 +1136,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Moving Speaker Sim - Pan/Tilt controller")
     parser.add_argument("-p", "--port", dest="serial_port", default="COM4")
     parser.add_argument("-l", "--log",  dest="log",         default=None)
+    parser.add_argument(
+        "-s", "--scenario", dest="scenario",
+        help="CSV movement scenario to execute at startup",
+    )
     args = parser.parse_args()
 
     app = QApplication(sys.argv)
     app.setStyleSheet(_DARK)
-    window = MotorHeadUI(serial_port=args.serial_port, log_path=args.log)
+    try:
+        window = MotorHeadUI(
+            serial_port=args.serial_port,
+            log_path=args.log,
+            scenario_path=args.scenario,
+        )
+    except RuntimeError as error:
+        parser.error(str(error))
     window.show()
     sys.exit(app.exec())

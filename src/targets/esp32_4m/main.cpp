@@ -57,7 +57,7 @@ void setup()
     delay(1000);
 
     stepperA.Setup(D0, D1, 480e-6, 32000, -8000, 8000);
-    stepperB.Setup(D2, D3, 480e-6, 8000, 0, 8000);
+    stepperB.Setup(D2, D3, 480e-6, 16000, 0, 16000);
     stepperC.Setup(D4, D5, 480e-6, 32000, -8000, 8000);
     stepperD.Setup(D7, D8, 480e-6, 16000, 0, 16000);
     setupMotorTimers();
