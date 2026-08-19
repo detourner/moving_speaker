@@ -2,7 +2,6 @@
 #define STEPPER_H
 
 #include <stdint.h>
-#include <cmath>
 #include "timer.h"
 
 enum RotaryMode : uint8_t {
