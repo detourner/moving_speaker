@@ -137,7 +137,6 @@ void MovingSpeakerProtocol::processCommand(uint16_t length)
     char* token = strtok(_buffer, ",");
     for (uint8_t index = 0; index < _motorCount; ++index) {
         commands[index].mode = ROT_SHORTEST;
-
         if (!parseDouble(token, commands[index].target)) return;
         token = strtok(NULL, ",");
         if (!parseDouble(token, commands[index].speed)) return;
@@ -145,12 +144,11 @@ void MovingSpeakerProtocol::processCommand(uint16_t length)
         if (_motors[index].modulo) {
             token = strtok(NULL, ",");
             if (!parseMode(token, commands[index].mode)) return;
-            token = strtok(NULL, ",");
-            if (!parseDouble(token, commands[index].acceleration)) return;
-        } else {
-            token = strtok(NULL, ",");
-            if (!parseDouble(token, commands[index].acceleration)) return;
         }
+
+        token = strtok(NULL, ",");
+        if (!parseDouble(token, commands[index].acceleration)) return;
+        token = strtok(NULL, ",");
     }
 
     for (uint8_t index = 0; index < _motorCount; ++index) {
