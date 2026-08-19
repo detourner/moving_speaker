@@ -1,8 +1,15 @@
-#ifndef STEPPER_H
-#define STEPPER_H
+#ifndef STEPPER_CORE_H
+#define STEPPER_CORE_H
 
+#include <Arduino.h>
 #include <stdint.h>
-#include <cmath>
+#include <math.h>
+
+#ifdef IRAM_ATTR
+#define STEPPER_IRAM_ATTR IRAM_ATTR
+#else
+#define STEPPER_IRAM_ATTR
+#endif
 
 enum RotaryMode : uint8_t {
     ROT_SHORTEST,
@@ -10,30 +17,28 @@ enum RotaryMode : uint8_t {
     ROT_CCW,
 };
 
-class Stepper
+class StepperCore
 {
     public:
         void Setup(uint8_t stepPin, uint8_t dirPin,
-                   uint8_t timerNum,
                    double timerPeriodSec,
                    long steps_per_rev,
                    long minPos, long maxPos);
 
-        void IRAM_ATTR RunISR(void);
+        void STEPPER_IRAM_ATTR RunISR();
 
         void moveToSteps(long absolute);
+        void moveToModuloSteps(long targetModulo, RotaryMode mode = ROT_SHORTEST);
+        void moveToWithLimitsSteps(long absolute);
+
         void moveToDeg(double absolute)
         {
             moveToSteps((long)round(absolute * _steps_per_rev / 360.0));
         }
-
-        void moveToModuloSteps(long targetModulo, RotaryMode mode = ROT_SHORTEST);
         void moveToModuloDeg(double targetModulo, RotaryMode mode = ROT_SHORTEST)
         {
             moveToModuloSteps((long)round(targetModulo * _steps_per_rev / 360.0), mode);
         }
-
-        void moveToWithLimitsSteps(long absolute);
         void moveToWithLimitsDeg(double absolute)
         {
             moveToWithLimitsSteps((long)round(absolute * _steps_per_rev / 360.0));
@@ -41,24 +46,26 @@ class Stepper
 
         bool isRunning()
         {
-            return !(_position == _targetPos && _curSpeed == 0.0 && _accSteps == 0 && _reversing == false);
+            return !(_position == _targetPos && _curSpeed == 0.0 &&
+                     _accSteps == 0 && _reversing == false);
         }
 
         void renormalizePosition();
         bool homePosition();
         void setMaxSpeed(double vm);
+        void setAcceleration(double accel);
+
         void setMaxSpeedDeg(double vmDeg)
         {
             setMaxSpeed(vmDeg * (double)_steps_per_rev / 360.0);
         }
-        void setAcceleration(double a);
-        void setAccelerationDeg(double aDeg)
+        void setAccelerationDeg(double accelDeg)
         {
-            setAcceleration(aDeg * (double)_steps_per_rev / 360.0);
+            setAcceleration(accelDeg * (double)_steps_per_rev / 360.0);
         }
 
         long getPositionSteps(void) { return _position; }
-        double getPositionDeg(void)
+        double getPositionDeg()
         {
             return (double)_position * 360.0 / (double)_steps_per_rev;
         }
@@ -68,71 +75,81 @@ class Stepper
             if (posModulo < 0) posModulo += _steps_per_rev;
             return posModulo;
         }
-        double getPositionModuloDeg(void)
+        double getPositionModuloDeg()
         {
-            long posModulo = getPositionModuloSteps();
-            return (double)posModulo * 360.0 / (double)_steps_per_rev;
+            return (double)getPositionModuloSteps() * 360.0 /
+                   (double)_steps_per_rev;
         }
 
         double getSpeed(void) { return _curSpeed; }
-        double getSpeedDeg(void)
+        double getSpeedDeg()
         {
             return _curSpeed * 360.0 / (double)_steps_per_rev;
         }
         double getMaxSpeed(void) { return _vmax; }
-        double getMaxSpeedDeg(void)
+        double getMaxSpeedDeg()
         {
             return _vmax * 360.0 / (double)_steps_per_rev;
         }
         double getAccel(void) { return _accel; }
-        double getAccelDeg(void)
+        double getAccelDeg()
         {
             return _accel * 360.0 / (double)_steps_per_rev;
         }
         double getTargetPosition(void) { return _targetPos; }
-        double getTargetPositionDeg(void)
+        double getTargetPositionDeg()
         {
             return (double)_targetPos * 360.0 / (double)_steps_per_rev;
         }
 
         double getMaxSpeedMax(void) { return _vmaxMax; }
-        double getMaxSpeedDegMax(void)
+        double getMaxSpeedDegMax()
         {
             return _vmaxMax * 360.0 / (double)_steps_per_rev;
         }
         double getMaxSpeedMin(void) { return _vmaxMin; }
-        double getMaxSpeedDegMin(void)
+        double getMaxSpeedDegMin()
         {
             return _vmaxMin * 360.0 / (double)_steps_per_rev;
         }
         double getAccelMin(void) { return _accelMin; }
-        double getAccelDegMin(void)
+        double getAccelDegMin()
         {
             return _accelMin * 360.0 / (double)_steps_per_rev;
         }
         double getAccelMax(void) { return _accelMax; }
-        double getAccelDegMax(void)
+        double getAccelDegMax()
         {
             return _accelMax * 360.0 / (double)_steps_per_rev;
         }
 
         double getMaxPosition(void) { return _maxPos; }
-        double getMaxPositionDeg(void)
+        double getMaxPositionDeg()
         {
             return (double)_maxPos * 360.0 / (double)_steps_per_rev;
         }
         double getMinPosition(void) { return _minPos; }
-        double getMinPositionDeg(void)
+        double getMinPositionDeg()
         {
             return (double)_minPos * 360.0 / (double)_steps_per_rev;
         }
 
-    private:
-        uint8_t _stepPin;
-        uint8_t _dirPin;
-        uint8_t _timerNum;
-        hw_timer_t* _timer = nullptr;
+    protected:
+        void configurePins(uint8_t stepPin, uint8_t dirPin)
+        {
+            _stepPin = stepPin;
+            _dirPin = dirPin;
+        }
 
+        void configureMotion(double timerPeriodSec, long stepsPerRev,
+                             long minPos, long maxPos);
+
+        void STEPPER_IRAM_ATTR emitStep(int direction);
+        void enterCritical();
+        void leaveCritical();
+
+        uint8_t _stepPin = 0;
+        uint8_t _dirPin = 0;
         volatile long _position = 0;
         volatile double _curSpeed = 0.0;
         volatile double _accSteps = 0.0;
@@ -144,8 +161,6 @@ class Stepper
         long _targetDuringReverse = 0;
 
         double _timerPeriod = 480e-6;
-        uint64_t _timerSet = 0;
-
         long _steps_per_rev = 32000;
         long _minPos = 0;
         long _maxPos = 32000;

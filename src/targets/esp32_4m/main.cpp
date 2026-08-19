@@ -1,68 +1,56 @@
 #include <Arduino.h>
-#include "stepper.h"
+#include "../../common/moving_speaker_protocol.h"
 
-char myData[200];
+StepperCore stepperA;
+StepperCore stepperB;
+StepperCore stepperC;
+StepperCore stepperD;
 
-Stepper stepperA;
-Stepper stepperB;
-Stepper stepperC;
-Stepper stepperD;
+MotorChannel motors[] = {
+    { &stepperA, false },
+    { &stepperB, true },
+    { &stepperC, false },
+    { &stepperD, true },
+};
 
-void printInfoFrame()
+MovingSpeakerProtocol protocol(
+    Serial, motors, 4,
+    "I: Moving Speaker V2.1 by D\xC3\xA9tourner",
+    true,
+    true);
+
+static hw_timer_t* timerGroup0 = nullptr;
+static hw_timer_t* timerGroup1 = nullptr;
+
+void IRAM_ATTR timerGroupISR0()
 {
-    Serial.println("I: Moving Speaker V2.0 by D\xC3\xA9tourner");
-    Serial.print("I:");
-    Serial.print(stepperA.getMinPositionDeg());
-    Serial.print(",");
-    Serial.print(stepperA.getMaxPositionDeg());
-    Serial.print(",");
-    Serial.print(stepperA.getMaxSpeedDegMin());
-    Serial.print(",");
-    Serial.print(stepperA.getMaxSpeedDegMax());
-    Serial.print(",");
-    Serial.print(stepperA.getAccelDegMin());
-    Serial.print(",");
-    Serial.print(stepperA.getAccelDegMax());
-    Serial.print(",");
+    stepperA.RunISR();
+    stepperB.RunISR();
+}
 
-    Serial.print(stepperB.getMinPositionDeg());
-    Serial.print(",");
-    Serial.print(stepperB.getMaxPositionDeg());
-    Serial.print(",");
-    Serial.print(stepperB.getMaxSpeedDegMin());
-    Serial.print(",");
-    Serial.print(stepperB.getMaxSpeedDegMax());
-    Serial.print(",");
-    Serial.print(stepperB.getAccelDegMin());
-    Serial.print(",");
-    Serial.print(stepperB.getAccelDegMax());
-    Serial.print(",");
+void IRAM_ATTR timerGroupISR1()
+{
+    stepperC.RunISR();
+    stepperD.RunISR();
+}
 
-    Serial.print(stepperC.getMinPositionDeg());
-    Serial.print(",");
-    Serial.print(stepperC.getMaxPositionDeg());
-    Serial.print(",");
-    Serial.print(stepperC.getMaxSpeedDegMin());
-    Serial.print(",");
-    Serial.print(stepperC.getMaxSpeedDegMax());
-    Serial.print(",");
-    Serial.print(stepperC.getAccelDegMin());
-    Serial.print(",");
-    Serial.print(stepperC.getAccelDegMax());
-    Serial.print(",");
+static void setupMotorTimers()
+{
+    constexpr uint64_t timerPeriodUs = 480;
 
-    Serial.print(stepperD.getMinPositionDeg());
-    Serial.print(",");
-    Serial.print(stepperD.getMaxPositionDeg());
-    Serial.print(",");
-    Serial.print(stepperD.getMaxSpeedDegMin());
-    Serial.print(",");
-    Serial.print(stepperD.getMaxSpeedDegMax());
-    Serial.print(",");
-    Serial.print(stepperD.getAccelDegMin());
-    Serial.print(",");
-    Serial.println(stepperD.getAccelDegMax());
-    Serial.println("I: Ready");
+    timerGroup0 = timerBegin(1000000);
+    if (timerGroup0) {
+        timerAttachInterrupt(timerGroup0, timerGroupISR0);
+        timerAlarm(timerGroup0, timerPeriodUs, true, 0);
+        timerStart(timerGroup0);
+    }
+
+    timerGroup1 = timerBegin(1000000);
+    if (timerGroup1) {
+        timerAttachInterrupt(timerGroup1, timerGroupISR1);
+        timerAlarm(timerGroup1, timerPeriodUs, true, 0);
+        timerStart(timerGroup1);
+    }
 }
 
 void setup()
@@ -70,176 +58,16 @@ void setup()
     Serial.begin(115200);
     delay(1000);
 
-    stepperA.Setup(D0, D1, 0, 480e-6, 32000, -8000, 8000);
-    stepperB.Setup(D2, D3, 1, 480e-6, 8000, 0, 8000);
-    stepperC.Setup(D4, D5, 2, 480e-6, 32000, -8000, 8000);
-    stepperD.Setup(D7, D8, 3, 480e-6, 16000, 0, 16000);
+    stepperA.Setup(D0, D1, 480e-6, 32000, -8000, 8000);
+    stepperB.Setup(D2, D3, 480e-6, 8000, 0, 8000);
+    stepperC.Setup(D4, D5, 480e-6, 32000, -8000, 8000);
+    stepperD.Setup(D7, D8, 480e-6, 16000, 0, 16000);
+    setupMotorTimers();
 
-    printInfoFrame();
+    protocol.sendInfoFrame();
 }
 
 void loop()
 {
-    static long updateSendSerial = 0;
-
-    if (millis() - updateSendSerial > 100)
-    {
-        updateSendSerial = millis();
-
-        Serial.print("P: ");
-        Serial.print(stepperA.isRunning());
-        Serial.print(",");
-        Serial.print(stepperA.getPositionDeg());
-        Serial.print(",");
-        Serial.print(stepperA.getSpeedDeg());
-        Serial.print(",");
-
-        Serial.print(stepperB.isRunning());
-        Serial.print(",");
-        Serial.print(stepperB.getPositionModuloDeg());
-        Serial.print(",");
-        Serial.print(stepperB.getSpeedDeg());
-        Serial.print(",");
-
-        Serial.print(stepperC.isRunning());
-        Serial.print(",");
-        Serial.print(stepperC.getPositionDeg());
-        Serial.print(",");
-        Serial.print(stepperC.getSpeedDeg());
-        Serial.print(",");
-
-        Serial.print(stepperD.isRunning());
-        Serial.print(",");
-        Serial.print(stepperD.getPositionModuloDeg());
-        Serial.print(",");
-        Serial.println(stepperD.getSpeedDeg());
-
-        stepperB.renormalizePosition();
-        stepperD.renormalizePosition();
-    }
-
-    if (Serial.available())
-    {
-        byte n = Serial.readBytesUntil('\n', myData, sizeof(myData) - 1);
-        myData[n] = '\0';
-
-        if (n == 1 && myData[0] == 'I') {
-            printInfoFrame();
-            return;
-        }
-
-        int fieldCount = 0;
-        for (byte i = 0; i < n; i++) {
-            if (myData[i] == ',') fieldCount++;
-        }
-        if (fieldCount != 14 - 1) {
-            Serial.println("E:Invalid frame: wrong number of fields");
-            return;
-        }
-
-        char* token = strtok(myData, ",");
-        if (!token) return;
-        double motA_target = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motA_speed = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motA_accel = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motB_target = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motB_speed = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        RotaryMode motB_dir = (RotaryMode)atoi(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motB_accel = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motC_target = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motC_speed = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motC_accel = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motD_target = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motD_speed = atof(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        RotaryMode motD_dir = (RotaryMode)atoi(token);
-
-        token = strtok(NULL, ",");
-        if (!token) return;
-        double motD_accel = atof(token);
-
-        stepperA.setAccelerationDeg(motA_accel);
-        stepperA.setMaxSpeedDeg(motA_speed);
-        stepperA.moveToWithLimitsDeg(motA_target);
-
-        stepperB.setAccelerationDeg(motB_accel);
-        stepperB.setMaxSpeedDeg(motB_speed);
-        stepperB.moveToModuloDeg(motB_target, motB_dir);
-
-        stepperC.setAccelerationDeg(motC_accel);
-        stepperC.setMaxSpeedDeg(motC_speed);
-        stepperC.moveToWithLimitsDeg(motC_target);
-
-        stepperD.setAccelerationDeg(motD_accel);
-        stepperD.setMaxSpeedDeg(motD_speed);
-        stepperD.moveToModuloDeg(motD_target, motD_dir);
-
-        Serial.print("S: ");
-        Serial.print(stepperA.isRunning());
-        Serial.print(",");
-        Serial.print(stepperA.getTargetPositionDeg());
-        Serial.print(",");
-        Serial.print(stepperA.getMaxSpeedDeg());
-        Serial.print(",");
-        Serial.print(stepperA.getAccelDeg());
-        Serial.print(",");
-        Serial.print(stepperB.isRunning());
-        Serial.print(",");
-        Serial.print(stepperB.getTargetPositionDeg());
-        Serial.print(",");
-        Serial.print(stepperB.getMaxSpeedDeg());
-        Serial.print(",");
-        Serial.print(stepperB.getAccelDeg());
-        Serial.print(",");
-        Serial.print(stepperC.isRunning());
-        Serial.print(",");
-        Serial.print(stepperC.getTargetPositionDeg());
-        Serial.print(",");
-        Serial.print(stepperC.getMaxSpeedDeg());
-        Serial.print(",");
-        Serial.print(stepperC.getAccelDeg());
-        Serial.print(",");
-        Serial.print(stepperD.isRunning());
-        Serial.print(",");
-        Serial.print(stepperD.getTargetPositionDeg());
-        Serial.print(",");
-        Serial.print(stepperD.getMaxSpeedDeg());
-        Serial.print(",");
-        Serial.println(stepperD.getAccelDeg());
-    }
+    protocol.process();
 }
