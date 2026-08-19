@@ -20,9 +20,10 @@ You can download demo/demo.mp4 video file
 
 
 **Key firmware files**
-- ESP32 target: `src/targets/esp32_4m/main.cpp`, `src/targets/esp32_4m/stepper.h`, `src/targets/esp32_4m/stepper.cpp`
-- AVR target: `src/targets/avr_2m/main.cpp`, `src/targets/avr_2m/stepper.h`, `src/targets/avr_2m/stepper.cpp`, `src/targets/avr_2m/timer.h`, `src/targets/avr_2m/timer.cpp`
-- Shared helper: `src/digitalWriteFast.h`
+- ESP32 target: `src/targets/esp32_4m/main.cpp`
+- AVR target: `src/targets/avr_2m/main.cpp`, `src/targets/avr_2m/timer.h`, `src/targets/avr_2m/timer.cpp`
+- Shared motion and protocol code: `src/common/stepper_core.h/.cpp`, `src/common/moving_speaker_protocol.h/.cpp`
+- Shared helper: `include/digitalWriteFast.h`
 
 ---
 **Serial communication settings**
@@ -35,10 +36,10 @@ You can download demo/demo.mp4 video file
 
 1) Startup information frames
 - The board prints some information at startup:
-	- `I: Moving Speaker V1.0 by Détourner`
-	- `I:` followed by a line with 24 comma-separated values (no extra prefix) that describe the limits and ranges for motors A and B. Motors C and D use the same range definitions as A and B respectively.
+	- `I: Moving Speaker V2.1 by Détourner`
+	- `I:` followed by a line with 12 comma-separated values on AVR or 24 values on ESP32. The values describe the limits and ranges for each configured motor.
 
-	Order of the 24 values (comma-separated):
+	Order of the values (six per motor, comma-separated):
 	- (1) motor A, min position in degree 
 	- (2) motor A, max position in degree
 	- (3) motor A, min speed in °/s
@@ -51,7 +52,7 @@ You can download demo/demo.mp4 video file
 	- (10) motor B, max speed in °/s
 	- (11) motor B, min acceleration in °/s^2
 	- (12) motor B, max acceleration in °/s^2
-	- same for motor C and D
+	- the same six fields repeat for each additional motor
 
 	Example (console):
 	I:
@@ -79,8 +80,12 @@ You can download demo/demo.mp4 video file
 	Example:
 	P:1,12.34,5.00,0,270.00,0.00,1,12.34,5.00,0,90.00,0.00
 
-3) Confirmation frames after a command is received (`S:`)
-- When the firmware receives and accepts a command frame, it replies with:
+3) State confirmation frames (`S:`)
+- The firmware does not send this frame automatically after a command. Send the request `T` followed by `\n` to obtain it:
+
+	T
+
+- The firmware then replies with:
 	S:isRunningA,targetA_deg,maxSpeedA_deg,accelA_degPerSec,isRunningB,targetB_deg,maxSpeedB_deg,accelB_degPerSec,isRunningC,targetC_deg,maxSpeedC_deg,accelC_degPerSec,isRunningD,targetD_deg,maxSpeedD_deg,accelD_degPerSec
 
 	Example:
@@ -89,6 +94,10 @@ You can download demo/demo.mp4 video file
 4) Error frames (`E:`)
 - Format error (wrong number of fields):
 	E:Invalid frame: wrong number of fields
+- Invalid numeric field:
+	E:Invalid frame: invalid numeric field
+- Invalid rotation mode:
+	E:Invalid frame: invalid rotation mode
 
 ---
 **Command format (PC -> firmware)**
@@ -124,6 +133,8 @@ Order of the 14 fields:
 
 Notes:
 - All fields are ASCII decimal numbers; floating point values are accepted where relevant.
+- Numeric fields must contain a complete finite number. Values such as `abc`, `nan` or `inf` are rejected.
+- Rotation modes must be `0`, `1` or `2`.
 - The line must contain exactly 13 commas (14 fields). Otherwise the Arduino will return an `E:` error frame.
 
 Command example (terminated by `\n`):
@@ -249,10 +260,11 @@ python -c "import serial, time; s=serial.Serial('COM3',115200,timeout=1); time.s
 ---
 **Key source files**
 - `src/targets/esp32_4m/main.cpp` — 4-motor ESP32 application logic
-- `src/targets/esp32_4m/stepper.h` / `src/targets/esp32_4m/stepper.cpp` — ESP32 stepper and timer-group logic
+- `src/targets/esp32_4m/main.cpp` — 4-motor ESP32 application and timer-group logic
 - `src/targets/avr_2m/main.cpp` — 2-motor AVR application logic
-- `src/targets/avr_2m/stepper.h` / `src/targets/avr_2m/stepper.cpp` — AVR stepper logic
 - `src/targets/avr_2m/timer.h` / `src/targets/avr_2m/timer.cpp` — AVR Timer1 configuration and ISRs
+- `src/common/stepper_core.h` / `src/common/stepper_core.cpp` — shared stepper implementation
+- `src/common/moving_speaker_protocol.h` / `src/common/moving_speaker_protocol.cpp` — shared serial protocol
 - `docker/platformio-docker.bat` — per-target Docker build helper
 ---
  

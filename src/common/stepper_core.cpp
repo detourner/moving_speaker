@@ -12,6 +12,81 @@ void StepperCore::Setup(uint8_t stepPin, uint8_t dirPin,
     pinModeFast(_dirPin, OUTPUT);
 }
 
+void StepperCore::readState(StepperState& state)
+{
+    enterCritical();
+    state.position = _position;
+    state.positionModulo = _position % _steps_per_rev;
+    if (state.positionModulo < 0) state.positionModulo += _steps_per_rev;
+    state.targetPosition = _targetPos;
+    state.stepsPerRev = _steps_per_rev;
+    state.speed = _curSpeed;
+    state.maxSpeed = _vmax;
+    state.acceleration = _accel;
+    state.running = !(_position == _targetPos && _curSpeed == 0.0 &&
+                      _accSteps == 0.0 && !_reversing);
+    leaveCritical();
+}
+
+void StepperCore::applyCommandDegrees(double targetDeg, double speedDeg,
+                                      double accelerationDeg, RotaryMode mode,
+                                      bool modulo)
+{
+    long target = (long)round(targetDeg * _steps_per_rev / 360.0);
+    double speed = speedDeg * (double)_steps_per_rev / 360.0;
+    double acceleration = accelerationDeg * (double)_steps_per_rev / 360.0;
+
+    enterCritical();
+
+    if (speed < 0) speed = -speed;
+    if (speed < _vmaxMin) speed = _vmaxMin;
+    if (speed > _vmaxMax) speed = _vmaxMax;
+    _vmax = speed;
+
+    if (acceleration < 0) acceleration = -acceleration;
+    if (acceleration < _accelMin) acceleration = _accelMin;
+    if (acceleration > _accelMax) acceleration = _accelMax;
+    if (_accel != acceleration && !isRunning()) _accel = acceleration;
+
+    if (modulo) {
+        target %= _steps_per_rev;
+        if (target < 0) target += _steps_per_rev;
+
+        long positionModulo = _position % _steps_per_rev;
+        if (positionModulo < 0) positionModulo += _steps_per_rev;
+        long clockwiseDistance = target - positionModulo;
+        if (clockwiseDistance < 0) clockwiseDistance += _steps_per_rev;
+        long counterClockwiseDistance = positionModulo - target;
+        if (counterClockwiseDistance < 0) counterClockwiseDistance += _steps_per_rev;
+
+        long finalTarget = _position;
+        if (mode == ROT_CW) finalTarget += clockwiseDistance;
+        else if (mode == ROT_CCW) finalTarget -= counterClockwiseDistance;
+        else if (clockwiseDistance <= counterClockwiseDistance)
+            finalTarget += clockwiseDistance;
+        else
+            finalTarget -= counterClockwiseDistance;
+        target = finalTarget;
+    } else {
+        if (target > _maxPos) target = _maxPos;
+        if (target < _minPos) target = _minPos;
+    }
+
+    if (target != _targetPos) {
+        long currentDirection = _targetPos - _position;
+        long newDirection = target - _position;
+        if (isRunning() && currentDirection * newDirection < 0) {
+            _reversing = true;
+            _targetDuringReverse = target;
+        } else {
+            _targetPos = target;
+            _reversing = false;
+        }
+    }
+
+    leaveCritical();
+}
+
 void StepperCore::configureMotion(double timerPeriodSec, long stepsPerRev,
                                   long minPos, long maxPos)
 {
@@ -143,77 +218,4 @@ bool StepperCore::homePosition()
     _accSteps = 0.0;
     leaveCritical();
     return true;
-}
-
-void StepperCore::moveToModuloSteps(long targetModulo, RotaryMode mode)
-{
-    targetModulo %= _steps_per_rev;
-    if (targetModulo < 0) targetModulo += _steps_per_rev;
-
-    long positionModulo = _position % _steps_per_rev;
-    if (positionModulo < 0) positionModulo += _steps_per_rev;
-
-    long clockwiseDistance = targetModulo - positionModulo;
-    if (clockwiseDistance < 0) clockwiseDistance += _steps_per_rev;
-
-    long counterClockwiseDistance = positionModulo - targetModulo;
-    if (counterClockwiseDistance < 0) counterClockwiseDistance += _steps_per_rev;
-
-    long finalTarget = _position;
-    switch (mode) {
-        case ROT_CW:
-            finalTarget += clockwiseDistance;
-            break;
-        case ROT_CCW:
-            finalTarget -= counterClockwiseDistance;
-            break;
-        case ROT_SHORTEST:
-        default:
-            if (clockwiseDistance <= counterClockwiseDistance)
-                finalTarget += clockwiseDistance;
-            else
-                finalTarget -= counterClockwiseDistance;
-            break;
-    }
-
-    moveToSteps(finalTarget);
-}
-
-void StepperCore::moveToWithLimitsSteps(long absolute)
-{
-    if (absolute > _maxPos) absolute = _maxPos;
-    if (absolute < _minPos) absolute = _minPos;
-    moveToSteps(absolute);
-}
-
-void StepperCore::moveToSteps(long absolute)
-{
-    if (absolute != _targetPos) {
-        long currentDirection = _targetPos - _position;
-        long newDirection = absolute - _position;
-
-        if (isRunning() && currentDirection * newDirection < 0) {
-            _reversing = true;
-            _targetDuringReverse = absolute;
-        } else {
-            _targetPos = absolute;
-            _reversing = false;
-        }
-    }
-}
-
-void StepperCore::setMaxSpeed(double vm)
-{
-    if (vm < 0) vm = -vm;
-    if (vm < _vmaxMin) vm = _vmaxMin;
-    if (vm > _vmaxMax) vm = _vmaxMax;
-    _vmax = vm;
-}
-
-void StepperCore::setAcceleration(double accel)
-{
-    if (accel < 0) accel = -accel;
-    if (accel < _accelMin) accel = _accelMin;
-    if (accel > _accelMax) accel = _accelMax;
-    if (_accel != accel && !isRunning()) _accel = accel;
 }

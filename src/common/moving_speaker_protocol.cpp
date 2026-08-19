@@ -1,20 +1,29 @@
 #include "moving_speaker_protocol.h"
 
+#include <ctype.h>
+#include <errno.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+namespace {
+struct ParsedMotorCommand
+{
+    double target;
+    double speed;
+    double acceleration;
+    RotaryMode mode;
+};
+}
 
 MovingSpeakerProtocol::MovingSpeakerProtocol(Stream& serial,
                                              MotorChannel* motors,
                                              uint8_t motorCount,
-                                             const char* infoTitle,
-                                             bool infoRequestEnabled,
-                                             bool statusPrefixSpace)
+                                             const char* infoTitle)
     : _serial(serial),
       _motors(motors),
       _motorCount(motorCount),
-      _infoTitle(infoTitle),
-      _infoRequestEnabled(infoRequestEnabled),
-      _statusPrefixSpace(statusPrefixSpace)
+    _infoTitle(infoTitle)
 {
 }
 
@@ -27,10 +36,22 @@ void MovingSpeakerProtocol::process()
 
     if (_serial.available()) {
         uint16_t length = _serial.readBytesUntil('\n', _buffer, sizeof(_buffer) - 1);
+
+        if (length == sizeof(_buffer) - 1) {
+            _serial.find('\n');
+            _serial.println("E:Invalid frame: line too long");
+            return;
+        }
+
         _buffer[length] = '\0';
 
-        if (_infoRequestEnabled && length == 1 && _buffer[0] == 'I') {
+        if (length == 1 && _buffer[0] == 'I') {
             sendInfoFrame();
+            return;
+        }
+
+        if (length == 1 && _buffer[0] == 'T') {
+            sendStateFrame();
             return;
         }
 
@@ -67,18 +88,18 @@ void MovingSpeakerProtocol::sendInfoFrame()
 void MovingSpeakerProtocol::sendPositionFrame()
 {
     _serial.print("P:");
-    if (_statusPrefixSpace) _serial.print(" ");
 
     for (uint8_t index = 0; index < _motorCount; ++index) {
-        StepperCore& motor = *_motors[index].stepper;
-        _serial.print(motor.isRunning());
+        StepperState state;
+        _motors[index].stepper->readState(state);
+        _serial.print(state.running);
         _serial.print(",");
         if (_motors[index].modulo)
-            _serial.print(motor.getPositionModuloDeg());
+            _serial.print((double)state.positionModulo * 360.0 / state.stepsPerRev);
         else
-            _serial.print(motor.getPositionDeg());
+            _serial.print((double)state.position * 360.0 / state.stepsPerRev);
         _serial.print(",");
-        _serial.print(motor.getSpeedDeg());
+        _serial.print(state.speed * 360.0 / state.stepsPerRev);
 
         if (index + 1 < _motorCount) _serial.print(",");
     }
@@ -92,6 +113,12 @@ void MovingSpeakerProtocol::sendPositionFrame()
 
 void MovingSpeakerProtocol::processCommand(uint16_t length)
 {
+    constexpr uint8_t maxMotorChannels = 4;
+    if (_motorCount > maxMotorChannels) {
+        _serial.println("E:Invalid protocol configuration");
+        return;
+    }
+
     uint16_t commaCount = 0;
     for (uint16_t index = 0; index < length; ++index) {
         if (_buffer[index] == ',') ++commaCount;
@@ -106,50 +133,75 @@ void MovingSpeakerProtocol::processCommand(uint16_t length)
         return;
     }
 
+    ParsedMotorCommand commands[maxMotorChannels];
     char* token = strtok(_buffer, ",");
     for (uint8_t index = 0; index < _motorCount; ++index) {
-        double target;
-        double speed;
-        double acceleration;
-        RotaryMode mode = ROT_SHORTEST;
+        commands[index].mode = ROT_SHORTEST;
 
-        if (!parseDouble(token, target)) return;
+        if (!parseDouble(token, commands[index].target)) return;
         token = strtok(NULL, ",");
-        if (!parseDouble(token, speed)) return;
+        if (!parseDouble(token, commands[index].speed)) return;
 
         if (_motors[index].modulo) {
             token = strtok(NULL, ",");
-            if (!parseMode(token, mode)) return;
+            if (!parseMode(token, commands[index].mode)) return;
             token = strtok(NULL, ",");
-            if (!parseDouble(token, acceleration)) return;
+            if (!parseDouble(token, commands[index].acceleration)) return;
         } else {
             token = strtok(NULL, ",");
-            if (!parseDouble(token, acceleration)) return;
+            if (!parseDouble(token, commands[index].acceleration)) return;
         }
-
-        StepperCore& motor = *_motors[index].stepper;
-        motor.setAccelerationDeg(acceleration);
-        motor.setMaxSpeedDeg(speed);
-        if (_motors[index].modulo)
-            motor.moveToModuloDeg(target, mode);
-        else
-            motor.moveToWithLimitsDeg(target);
     }
 
-    sendStateFrame();
+    for (uint8_t index = 0; index < _motorCount; ++index) {
+        _motors[index].stepper->applyCommandDegrees(
+            commands[index].target,
+            commands[index].speed,
+            commands[index].acceleration,
+            commands[index].mode,
+            _motors[index].modulo);
+    }
+
 }
 
 bool MovingSpeakerProtocol::parseDouble(char*& token, double& value)
 {
-    if (!token) return false;
-    value = atof(token);
+    if (!token) {
+        _serial.println("E:Invalid frame: invalid numeric field");
+        return false;
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    value = strtod(token, &end);
+    while (end && isspace((unsigned char)*end)) ++end;
+
+    if (end == token || *end != '\0' || errno == ERANGE || !isfinite(value)) {
+        _serial.println("E:Invalid frame: invalid numeric field");
+        return false;
+    }
     return true;
 }
 
 bool MovingSpeakerProtocol::parseMode(char*& token, RotaryMode& mode)
 {
-    if (!token) return false;
-    mode = (RotaryMode)atoi(token);
+    if (!token) {
+        _serial.println("E:Invalid frame: invalid rotation mode");
+        return false;
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    long parsedMode = strtol(token, &end, 10);
+    while (end && isspace((unsigned char)*end)) ++end;
+
+    if (end == token || *end != '\0' || errno == ERANGE ||
+        parsedMode < ROT_SHORTEST || parsedMode > ROT_CCW) {
+        _serial.println("E:Invalid frame: invalid rotation mode");
+        return false;
+    }
+
+    mode = (RotaryMode)parsedMode;
     return true;
 }
 
@@ -157,14 +209,15 @@ void MovingSpeakerProtocol::sendStateFrame()
 {
     _serial.print("S: ");
     for (uint8_t index = 0; index < _motorCount; ++index) {
-        StepperCore& motor = *_motors[index].stepper;
-        _serial.print(motor.isRunning());
+        StepperState state;
+        _motors[index].stepper->readState(state);
+        _serial.print(state.running);
         _serial.print(",");
-        _serial.print(motor.getTargetPositionDeg());
+        _serial.print((double)state.targetPosition * 360.0 / state.stepsPerRev);
         _serial.print(",");
-        _serial.print(motor.getMaxSpeedDeg());
+        _serial.print(state.maxSpeed * 360.0 / state.stepsPerRev);
         _serial.print(",");
-        _serial.print(motor.getAccelDeg());
+        _serial.print(state.acceleration * 360.0 / state.stepsPerRev);
 
         if (index + 1 < _motorCount) _serial.print(",");
     }

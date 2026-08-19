@@ -16,9 +16,7 @@ class MovingSpeakerProtocol
         MovingSpeakerProtocol(Stream& serial,
                               MotorChannel* motors,
                               uint8_t motorCount,
-                              const char* infoTitle,
-                              bool infoRequestEnabled = true,
-                              bool statusPrefixSpace = false);
+                              const char* infoTitle);
 
         void process();
         void sendInfoFrame();
@@ -34,8 +32,6 @@ class MovingSpeakerProtocol
         MotorChannel* _motors;
         uint8_t _motorCount;
         const char* _infoTitle;
-        bool _infoRequestEnabled;
-        bool _statusPrefixSpace;
         unsigned long _lastPositionFrame = 0;
         char _buffer[200];
 };

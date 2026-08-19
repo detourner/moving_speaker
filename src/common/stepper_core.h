@@ -17,6 +17,18 @@ enum RotaryMode : uint8_t {
     ROT_CCW,
 };
 
+struct StepperState
+{
+    long position;
+    long positionModulo;
+    long targetPosition;
+    long stepsPerRev;
+    double speed;
+    double maxSpeed;
+    double acceleration;
+    bool running;
+};
+
 class StepperCore
 {
     public:
@@ -25,82 +37,14 @@ class StepperCore
                    long steps_per_rev,
                    long minPos, long maxPos);
 
+        void readState(StepperState& state);
+        void applyCommandDegrees(double targetDeg, double speedDeg,
+                     double accelerationDeg, RotaryMode mode,
+                     bool modulo);
+
         void STEPPER_IRAM_ATTR RunISR();
 
-        void moveToSteps(long absolute);
-        void moveToModuloSteps(long targetModulo, RotaryMode mode = ROT_SHORTEST);
-        void moveToWithLimitsSteps(long absolute);
-
-        void moveToDeg(double absolute)
-        {
-            moveToSteps((long)round(absolute * _steps_per_rev / 360.0));
-        }
-        void moveToModuloDeg(double targetModulo, RotaryMode mode = ROT_SHORTEST)
-        {
-            moveToModuloSteps((long)round(targetModulo * _steps_per_rev / 360.0), mode);
-        }
-        void moveToWithLimitsDeg(double absolute)
-        {
-            moveToWithLimitsSteps((long)round(absolute * _steps_per_rev / 360.0));
-        }
-
-        bool isRunning()
-        {
-            return !(_position == _targetPos && _curSpeed == 0.0 &&
-                     _accSteps == 0 && _reversing == false);
-        }
-
         void renormalizePosition();
-        bool homePosition();
-        void setMaxSpeed(double vm);
-        void setAcceleration(double accel);
-
-        void setMaxSpeedDeg(double vmDeg)
-        {
-            setMaxSpeed(vmDeg * (double)_steps_per_rev / 360.0);
-        }
-        void setAccelerationDeg(double accelDeg)
-        {
-            setAcceleration(accelDeg * (double)_steps_per_rev / 360.0);
-        }
-
-        long getPositionSteps(void) { return _position; }
-        double getPositionDeg()
-        {
-            return (double)_position * 360.0 / (double)_steps_per_rev;
-        }
-        long getPositionModuloSteps(void)
-        {
-            long posModulo = _position % _steps_per_rev;
-            if (posModulo < 0) posModulo += _steps_per_rev;
-            return posModulo;
-        }
-        double getPositionModuloDeg()
-        {
-            return (double)getPositionModuloSteps() * 360.0 /
-                   (double)_steps_per_rev;
-        }
-
-        double getSpeed(void) { return _curSpeed; }
-        double getSpeedDeg()
-        {
-            return _curSpeed * 360.0 / (double)_steps_per_rev;
-        }
-        double getMaxSpeed(void) { return _vmax; }
-        double getMaxSpeedDeg()
-        {
-            return _vmax * 360.0 / (double)_steps_per_rev;
-        }
-        double getAccel(void) { return _accel; }
-        double getAccelDeg()
-        {
-            return _accel * 360.0 / (double)_steps_per_rev;
-        }
-        double getTargetPosition(void) { return _targetPos; }
-        double getTargetPositionDeg()
-        {
-            return (double)_targetPos * 360.0 / (double)_steps_per_rev;
-        }
 
         double getMaxSpeedMax(void) { return _vmaxMax; }
         double getMaxSpeedDegMax()
@@ -123,18 +67,24 @@ class StepperCore
             return _accelMax * 360.0 / (double)_steps_per_rev;
         }
 
-        double getMaxPosition(void) { return _maxPos; }
         double getMaxPositionDeg()
         {
             return (double)_maxPos * 360.0 / (double)_steps_per_rev;
         }
-        double getMinPosition(void) { return _minPos; }
         double getMinPositionDeg()
         {
             return (double)_minPos * 360.0 / (double)_steps_per_rev;
         }
 
     protected:
+        bool isRunning()
+        {
+            return !(_position == _targetPos && _curSpeed == 0.0 &&
+                     _accSteps == 0 && _reversing == false);
+        }
+
+        bool homePosition();
+
         void configurePins(uint8_t stepPin, uint8_t dirPin)
         {
             _stepPin = stepPin;

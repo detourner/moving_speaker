@@ -15,9 +15,7 @@ MotorChannel motors[] = {
 
 MovingSpeakerProtocol protocol(
     Serial, motors, 4,
-    "I: Moving Speaker V2.1 by D\xC3\xA9tourner",
-    true,
-    true);
+    "I: Moving Speaker V2.1 by D\xC3\xA9tourner");
 
 static hw_timer_t* timerGroup0 = nullptr;
 static hw_timer_t* timerGroup1 = nullptr;
