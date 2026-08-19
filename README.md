@@ -1,12 +1,18 @@
-# Moving Speaker (Arduino)
+# Moving Speaker
 
-This repository contains the Arduino firmware for the "Moving Speaker" project (control of two stepper motors to aim a speaker). The main firmware is in `src/main.cpp`.
+This repository now hosts two firmware targets for the Moving Speaker project in a single codebase:
+
+- `esp32_4m`: ESP32 firmware for four stepper motors
+- `avr_2m`: AVR firmware for two stepper motors
+
+The source tree is split by target under `src/targets/` so each firmware can evolve independently while sharing the same repository, Docker tooling and release flow.
 
 **Hardware**
-- The firmware is developed and tested for the Seeed Studio XIAO ESP32C3. 
+- `esp32_4m`: Seeed Studio XIAO ESP32-C6
+- `avr_2m`: AVR target currently configured for `nanoatmega328new` in PlatformIO
 
 **Purpose**
-- Drive four stepper motors organized as two couples: motors A/C and motors B/D, with control over position, speed and acceleration.
+- Drive either two or four stepper motors depending on the selected target.
 - Communicate with a PC interface over a serial link (115200 baud) to receive setpoints and return status.
 
 **Demo**
@@ -14,8 +20,9 @@ You can download demo/demo.mp4 video file
 
 
 **Key firmware files**
-- Main application: `src/main.cpp`
-- Stepper control: `src/stepper.h`, `src/stepper.cpp`
+- ESP32 target: `src/targets/esp32_4m/main.cpp`, `src/targets/esp32_4m/stepper.h`, `src/targets/esp32_4m/stepper.cpp`
+- AVR target: `src/targets/avr_2m/main.cpp`, `src/targets/avr_2m/stepper.h`, `src/targets/avr_2m/stepper.cpp`, `src/targets/avr_2m/timer.h`, `src/targets/avr_2m/timer.cpp`
+- Shared helper: `src/digitalWriteFast.h`
 
 ---
 **Serial communication settings**
@@ -24,10 +31,10 @@ You can download demo/demo.mp4 video file
 - The firmware periodically emits a status frame and responds to commands from the PC.
 
 ---
-**Frames sent by the Arduino**
+**Frames sent by the firmware**
 
 1) Startup information frames
-- The Arduino prints some information at startup:
+- The board prints some information at startup:
 	- `I: Moving Speaker V1.0 by Détourner`
 	- `I:` followed by a line with 24 comma-separated values (no extra prefix) that describe the limits and ranges for motors A and B. Motors C and D use the same range definitions as A and B respectively.
 
@@ -73,7 +80,7 @@ You can download demo/demo.mp4 video file
 	P:1,12.34,5.00,0,270.00,0.00,1,12.34,5.00,0,90.00,0.00
 
 3) Confirmation frames after a command is received (`S:`)
-- When the Arduino receives and accepts a command frame, it replies with:
+- When the firmware receives and accepts a command frame, it replies with:
 	S:isRunningA,targetA_deg,maxSpeedA_deg,accelA_degPerSec,isRunningB,targetB_deg,maxSpeedB_deg,accelB_degPerSec,isRunningC,targetC_deg,maxSpeedC_deg,accelC_degPerSec,isRunningD,targetD_deg,maxSpeedD_deg,accelD_degPerSec
 
 	Example:
@@ -84,9 +91,14 @@ You can download demo/demo.mp4 video file
 	E:Invalid frame: wrong number of fields
 
 ---
-**Command format (PC → Arduino)**
+**Command format (PC -> firmware)**
 
-The firmware expects a single CSV line (no prefix) containing exactly 14 fields separated by commas, followed by a newline (`\n`).
+The serial command format depends on the selected target:
+
+- `esp32_4m` expects 14 CSV fields
+- `avr_2m` expects 7 CSV fields
+
+The examples below describe the `esp32_4m` format.
 
 Order of the 14 fields:
 1. `motA_target`  — target position for motor A (degrees)
@@ -141,15 +153,21 @@ You can build the firmware in two ways:
 
 Prerequisites: PlatformIO installed (for example via the VS Code PlatformIO extension) and the board connected.
 
-- Build:
+- Build ESP32 target:
 ```powershell
-cd C:\perso\moving_speaker
-platformio run
+cd C:\perso\dev\moving_speaker
+platformio run -e esp32_4m
 ```
 
-- Upload to the board:
+- Build AVR target:
 ```powershell
-platformio run --target upload
+cd C:\perso\dev\moving_speaker
+platformio run -e avr_2m
+```
+
+- Upload to the selected board:
+```powershell
+platformio run -e esp32_4m --target upload
 ```
 
 - Open the serial monitor (115200 baud):
@@ -159,37 +177,43 @@ platformio device monitor -b 115200
 
 2) Dockerized build (recommended for reproducibility)
 
-Use the helper script:
+Use the helper script with an explicit target:
 
-- Build (auto-creates image if missing):
+- Build ESP32 target (auto-creates images if missing):
 ```bat
-docker\platformio-docker.bat
+docker\platformio-docker.bat build esp32_4m
 ```
-or
+
+- Build AVR target:
 ```bat
-docker\platformio-docker.bat build
+docker\platformio-docker.bat build avr_2m
 ```
 
 - Show PlatformIO environment details:
 ```bat
-docker\platformio-docker.bat env
+docker\platformio-docker.bat env esp32_4m
+```
+
+- Open an interactive shell in a target container:
+```bat
+docker\platformio-docker.bat shell esp32_4m
 ```
 
 - Force a full rebuild of image and clean PlatformIO cache:
 ```bat
-docker\platformio-docker.bat rebuild
+docker\platformio-docker.bat rebuild avr_2m
 ```
 
-- Clean only the PlatformIO cache volume:
+- Clean only the PlatformIO cache volume for one target:
 ```bat
-docker\platformio-docker.bat cache-clean
+docker\platformio-docker.bat cache-clean esp32_4m
 ```
 
 Archive and restore image + cache:
 
-- Create both archives:
+- Create both archives for a target:
 ```bat
-docker\platformio-docker.bat archive
+docker\platformio-docker.bat archive esp32_4m
 ```
 This creates two files in the `docker` folder:
 - `...-image.tar` (Docker image)
@@ -197,11 +221,11 @@ This creates two files in the `docker` folder:
 
 - Restore from archive:
 ```bat
-docker\platformio-docker.bat load-archive C:\path\to\your-image.tar
+docker\platformio-docker.bat load-archive esp32_4m C:\path\to\your-image.tar
 ```
 If the matching `...-cache.tar` is present next to the image archive, it is restored automatically. You can also pass it explicitly:
 ```bat
-docker\platformio-docker.bat load-archive C:\path\to\your-image.tar C:\path\to\your-cache.tar
+docker\platformio-docker.bat load-archive esp32_4m C:\path\to\your-image.tar C:\path\to\your-cache.tar
 ```
 
 ---
@@ -219,14 +243,17 @@ python -c "import serial, time; s=serial.Serial('COM3',115200,timeout=1); time.s
 ---
 **Quick troubleshooting**
 - No response: check serial port and baud rate (115200).
-- `E:Invalid frame...`: verify there are exactly 7 fields (6 commas) and the line ends with `\n`.
+- `E:Invalid frame...`: verify the field count matches the selected target and the line ends with `\n`.
 - Unexpected values: check the ranges printed in the `I:` frame at startup.
 
 ---
 **Key source files**
-- `src/main.cpp` — main logic, serial parsing, frame formats
-- `src/stepper.h` / `src/stepper.cpp` — unit conversions, limits and rotation modes
-- `src/timer.h` / `src/timer.cpp` — timer configuration and ISRs
+- `src/targets/esp32_4m/main.cpp` — 4-motor ESP32 application logic
+- `src/targets/esp32_4m/stepper.h` / `src/targets/esp32_4m/stepper.cpp` — ESP32 stepper and timer-group logic
+- `src/targets/avr_2m/main.cpp` — 2-motor AVR application logic
+- `src/targets/avr_2m/stepper.h` / `src/targets/avr_2m/stepper.cpp` — AVR stepper logic
+- `src/targets/avr_2m/timer.h` / `src/targets/avr_2m/timer.cpp` — AVR Timer1 configuration and ISRs
+- `docker/platformio-docker.bat` — per-target Docker build helper
 ---
  
 ---

@@ -1,78 +1,91 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set "DEFAULT_TARGET=esp32_4m"
+
 rem Resolve script and workspace directories.
 for %%I in ("%~dp0.") do set "SCRIPT_DIR=%%~fI"
 for %%I in ("%SCRIPT_DIR%\..") do set "WORKSPACE_DIR=%%~fI"
 
-rem Build a repo-specific image/cache identity.
+set "COMMAND=%~1"
+if "%COMMAND%"=="" set "COMMAND=build"
+
+if /I "%COMMAND%"=="help" goto do_help
+if /I "%COMMAND%"=="-h" goto do_help
+if /I "%COMMAND%"=="--help" goto do_help
+if /I "%COMMAND%"=="list-targets" goto do_list_targets
+
+set "TARGET=%~2"
+if "%TARGET%"=="" set "TARGET=%DEFAULT_TARGET%"
+
+call :validate_target "%TARGET%"
+if errorlevel 1 goto end
+
 call :set_image_name
 if errorlevel 1 goto end
-set "DOCKERFILE_DIR=%SCRIPT_DIR%"
 
-rem Shared docker run arguments for all commands.
+set "BASE_DOCKERFILE=%SCRIPT_DIR%\Dockerfile.base"
+set "TARGET_DOCKERFILE=%SCRIPT_DIR%\Dockerfile.%TARGET%"
 set "DOCKER_MOUNTS=-v "%WORKSPACE_DIR%:/workspace" -v "%PIO_CACHE_VOLUME%:/root/.platformio""
-set "DOCKER_RUN_BASE=docker run --rm %DOCKER_MOUNTS% -w /workspace %IMAGE%"
+set "DOCKER_RUN_BASE=docker run --rm %DOCKER_MOUNTS% -w /workspace"
 
-if "%~1"=="" goto do_build
+if /I "%COMMAND%"=="build" goto do_build
+if /I "%COMMAND%"=="env" goto do_env
+if /I "%COMMAND%"=="shell" goto do_shell
+if /I "%COMMAND%"=="rebuild" goto do_rebuild
+if /I "%COMMAND%"=="cache-clean" goto do_cache_clean
+if /I "%COMMAND%"=="container-clean" goto do_container_clean
+if /I "%COMMAND%"=="archive" goto do_archive
+if /I "%COMMAND%"=="load-archive" goto do_load_archive
 
-rem Command dispatcher.
-if /I "%~1"=="build" goto do_build
-if /I "%~1"=="env" goto do_env
-if /I "%~1"=="shell" goto do_shell
-if /I "%~1"=="rebuild" goto do_rebuild
-if /I "%~1"=="cache-clean" goto do_cache_clean
-if /I "%~1"=="container-clean" goto do_container_clean
-if /I "%~1"=="archive" goto do_archive
-if /I "%~1"=="load-archive" goto do_load_archive
-if /I "%~1"=="help" goto do_help
-if /I "%~1"=="-h" goto do_help
-if /I "%~1"=="--help" goto do_help
-
-echo Unknown option: %~1
+echo Unknown option: %COMMAND%
 echo.
 goto do_help
 
 :do_build
-rem Ensure image exists before launching PlatformIO build.
-call :ensure_image
+call :ensure_target_image
 if errorlevel 1 goto end
-echo [build] Running PlatformIO build inside container...
-%DOCKER_RUN_BASE% pio run
+echo [build] Running PlatformIO build for target %TARGET% inside container...
+%DOCKER_RUN_BASE% %IMAGE% pio run -e %TARGET%
 goto end
 
 :do_env
-echo [env] PlatformIO environment information...
-%DOCKER_RUN_BASE% pio system info
+call :ensure_target_image
+if errorlevel 1 goto end
+echo [env] PlatformIO environment information for target %TARGET%...
+%DOCKER_RUN_BASE% %IMAGE% pio system info
 if errorlevel 1 goto end
 echo.
 echo ==========================
 echo.
-%DOCKER_RUN_BASE% pio pkg list
+%DOCKER_RUN_BASE% %IMAGE% pio pkg list -d /workspace -e %TARGET%
 goto end
 
 :do_shell
-echo [shell] Opening a shell in the container...
-docker run --rm -it %DOCKER_MOUNTS% -w /workspace %IMAGE% /bin/bash
+call :ensure_target_image
+if errorlevel 1 goto end
+echo [shell] Opening a shell in the container for target %TARGET%...
+docker run --rm -it %DOCKER_MOUNTS% -w /workspace -e MOVING_SPEAKER_TARGET=%TARGET% %IMAGE% /bin/bash
 goto end
 
 :do_rebuild
-rem Full rebuild path: clear cache then force image rebuild.
 call :purge_cache
 if errorlevel 1 goto end
-echo [rebuild] Forcing rebuild of image %IMAGE%...
-docker build --pull --no-cache -t %IMAGE% "%DOCKERFILE_DIR%"
+echo [rebuild] Rebuilding base image %BASE_IMAGE%...
+docker build --pull --no-cache -f "%BASE_DOCKERFILE%" -t %BASE_IMAGE% "%WORKSPACE_DIR%"
+if errorlevel 1 goto end
+echo [rebuild] Rebuilding target image %IMAGE%...
+docker build --no-cache -f "%TARGET_DOCKERFILE%" --build-arg BASE_IMAGE=%BASE_IMAGE% -t %IMAGE% "%WORKSPACE_DIR%"
 goto end
 
 :do_cache_clean
 call :purge_cache
 if errorlevel 1 goto end
-echo [cache-clean] PlatformIO cache cleaned.
+echo [cache-clean] PlatformIO cache cleaned for target %TARGET%.
 goto end
 
 :do_container_clean
 set "REMOVED_CONTAINER=0"
-rem Remove stopped/running containers created from the image.
 echo [container-clean] Removing containers based on %IMAGE%...
 for /f "delims=" %%C in ('docker ps -a --filter "ancestor=%IMAGE%" -q') do (
     set "REMOVED_CONTAINER=1"
@@ -101,25 +114,17 @@ echo [container-clean] Image removed.
 goto end
 
 :do_archive
-rem Create timestamped archives for both image and cache volume.
+call :ensure_target_image
+if errorlevel 1 goto end
 set "TS=%date:~6,4%%date:~3,2%%date:~0,2%-%time:~0,2%%time:~3,2%%time:~6,2%"
 set "TS=%TS: =0%"
 set "ARCHIVE_BASE=%WORKSPACE_DIR%\docker\%IMAGE::=-%-%TS%"
 set "ARCHIVE_IMAGE_FILE=%ARCHIVE_BASE%-image.tar"
 set "ARCHIVE_CACHE_FILE=%ARCHIVE_BASE%-cache.tar"
 
-echo [archive] Checking image %IMAGE%...
-docker image inspect %IMAGE% >nul 2>&1
-if errorlevel 1 (
-    echo Failed: image not found: %IMAGE%.
-    goto end
-)
-
 echo [archive] Saving image to "%ARCHIVE_IMAGE_FILE%"...
 docker save -o "%ARCHIVE_IMAGE_FILE%" %IMAGE%
-set "ARCHIVE_RC=%ERRORLEVEL%"
-
-if not "%ARCHIVE_RC%"=="0" (
+if errorlevel 1 (
     echo [archive] Archive save failed.
     goto end
 )
@@ -132,28 +137,23 @@ echo [archive] Cache archive created: "%ARCHIVE_CACHE_FILE%"
 goto end
 
 :do_load_archive
-rem Load image archive and optionally restore cache volume archive.
-if "%~2"=="" (
-    echo Usage: build.bat load-archive ^<image.tar^> [cache.tar]
+if "%~3"=="" (
+    echo Usage: platformio-docker.bat load-archive ^<target^> ^<image.tar^> [cache.tar]
     goto end
 )
 
-set "ARCHIVE_INPUT=%~f2"
+set "ARCHIVE_INPUT=%~f3"
 if not exist "%ARCHIVE_INPUT%" (
     echo Failed: archive not found: "%ARCHIVE_INPUT%"
     goto end
 )
 
-echo [load-archive] Loading "%ARCHIVE_INPUT%"...
+echo [load-archive] Loading "%ARCHIVE_INPUT%" for target %TARGET%...
 docker load -i "%ARCHIVE_INPUT%"
 if errorlevel 1 (
-    echo [load-archive] Format is not compatible with docker load. Trying docker import...
-    docker import "%ARCHIVE_INPUT%" %IMAGE% >nul
-    if errorlevel 1 (
-        echo Failed: could not load archive via docker load/import.
-        echo Ensure the .tar file comes from docker save or docker export.
-        goto end
-    )
+    echo Failed: could not load archive via docker load.
+    echo Ensure the .tar file comes from docker save.
+    goto end
 )
 
 docker image inspect %IMAGE% >nul 2>&1
@@ -165,7 +165,7 @@ if errorlevel 1 (
 
 echo [load-archive] Archive loaded, build image available: %IMAGE%.
 
-set "CACHE_ARCHIVE_INPUT=%~f3"
+set "CACHE_ARCHIVE_INPUT=%~f4"
 if "%CACHE_ARCHIVE_INPUT%"=="" (
     set "CACHE_ARCHIVE_INPUT=%ARCHIVE_INPUT:-image.tar=-cache.tar%"
 )
@@ -181,25 +181,35 @@ if exist "%CACHE_ARCHIVE_INPUT%" (
 goto end
 
 :do_help
-echo Usage: build.bat [option]
+echo Usage: platformio-docker.bat [command] [target] [archive args]
 echo.
-echo no option        : build the PlatformIO project
-echo build            : build the PlatformIO project
-echo env              : run pio system info + pio pkg list (no build)
-echo shell            : open a shell in the container
-echo rebuild          : clean PlatformIO cache + rebuild Docker image
-echo cache-clean      : clean the Docker volume used for PlatformIO cache
-echo container-clean  : remove build-image containers and the build image
-echo archive          : save Docker image + PlatformIO cache volume to .tar archives
-echo load-archive     : load image archive and optional cache archive
-echo help             : show this help
+echo Commands:
+echo   build [target]           Build the requested PlatformIO target. Default target: %DEFAULT_TARGET%
+echo   env [target]             Run pio system info and pio pkg list for the target
+echo   shell [target]           Open a shell in the target container
+echo   rebuild [target]         Clean target cache and rebuild base + target images
+echo   cache-clean [target]     Clean the Docker volume used for the target PlatformIO cache
+echo   container-clean [target] Remove target containers and the target image
+echo   archive [target]         Save target Docker image and PlatformIO cache volume to .tar archives
+echo   load-archive [target] ^<image.tar^> [cache.tar]
+echo                           Load target image archive and optional cache archive
+echo   list-targets             Show supported targets
+echo   help                     Show this help
+echo.
+echo Targets:
+echo   esp32_4m
+echo   avr_2m
+goto end
 
+:do_list_targets
+echo Supported targets:
+echo   esp32_4m
+echo   avr_2m
 goto end
 
 :archive_cache_volume
 set "CACHE_ARCHIVE_TARGET=%~f1"
 
-rem Ensure cache volume exists so archive command is deterministic.
 docker volume inspect "%PIO_CACHE_VOLUME%" >nul 2>&1
 if errorlevel 1 (
     echo [archive] Cache volume not found, creating empty volume: "%PIO_CACHE_VOLUME%"
@@ -242,8 +252,15 @@ if errorlevel 1 (
 
 exit /b 0
 
+:validate_target
+set "TARGET=%~1"
+if /I "%TARGET%"=="esp32_4m" exit /b 0
+if /I "%TARGET%"=="avr_2m" exit /b 0
+echo Failed: unsupported target "%TARGET%".
+echo Supported targets: esp32_4m, avr_2m
+exit /b 1
+
 :set_image_name
-rem Derive a unique identity from git remote when available.
 set "REPO_ID="
 set "REPO_NAME="
 set "IMAGE_BASE="
@@ -263,14 +280,12 @@ if not "!REPO_ID!"=="" (
 )
 
 if "%REPO_NAME%"=="" (
-    rem Fallback to repository root folder name.
     for /f "delims=" %%R in ('git -C "%WORKSPACE_DIR%" rev-parse --show-toplevel 2^>nul') do (
         for %%N in ("%%R") do set "REPO_NAME=%%~nxN"
     )
 )
 
 if "%REPO_NAME%"=="" (
-    rem Last fallback to workspace folder name.
     for %%N in ("%WORKSPACE_DIR%") do set "REPO_NAME=%%~nxN"
 )
 
@@ -280,8 +295,6 @@ if "%REPO_NAME%"=="" (
 )
 
 set "IMAGE_BASE=%REPO_NAME%"
-
-rem Docker image names must be lowercase and use [a-z0-9._-]
 set "IMAGE_BASE=%IMAGE_BASE: =-%"
 set "IMAGE_BASE=%IMAGE_BASE:_=-%"
 set "IMAGE_BASE=%IMAGE_BASE:.=-%"
@@ -317,31 +330,56 @@ set "IMAGE_BASE=!IMAGE_BASE:X=x!"
 set "IMAGE_BASE=!IMAGE_BASE:Y=y!"
 set "IMAGE_BASE=!IMAGE_BASE:Z=z!"
 
-set "IMAGE=platformio-!IMAGE_BASE!:1.0"
-set "PIO_CACHE_VOLUME=pio-cache-!IMAGE_BASE!"
-echo [init] Docker image: %IMAGE%
+set "BASE_IMAGE=platformio-!IMAGE_BASE!-base:1.0"
+set "IMAGE=platformio-!IMAGE_BASE!-%TARGET%:1.0"
+set "PIO_CACHE_VOLUME=pio-cache-!IMAGE_BASE!-%TARGET%"
+echo [init] Base Docker image: %BASE_IMAGE%
+echo [init] Target Docker image: %IMAGE%
 echo [init] PlatformIO cache volume: %PIO_CACHE_VOLUME%
 exit /b 0
 
-:ensure_image
-rem Auto-create the build image when it does not exist.
-docker image inspect %IMAGE% >nul 2>&1
-if not errorlevel 1 (
-    exit /b 0
+:ensure_target_image
+call :ensure_base_image
+if errorlevel 1 exit /b 1
+
+if not exist "%TARGET_DOCKERFILE%" (
+    echo Failed: target Dockerfile not found: "%TARGET_DOCKERFILE%"
+    exit /b 1
 )
 
-echo [build] Image %IMAGE% not found, creating it...
-docker build -t %IMAGE% "%DOCKERFILE_DIR%"
+docker image inspect %IMAGE% >nul 2>&1
+if not errorlevel 1 exit /b 0
+
+echo [build] Target image %IMAGE% not found, creating it...
+docker build -f "%TARGET_DOCKERFILE%" --build-arg BASE_IMAGE=%BASE_IMAGE% -t %IMAGE% "%WORKSPACE_DIR%"
 if errorlevel 1 (
     echo Failed: could not create image %IMAGE%.
     exit /b 1
 )
 
-echo [build] Image %IMAGE% created.
+echo [build] Target image %IMAGE% created.
+exit /b 0
+
+:ensure_base_image
+if not exist "%BASE_DOCKERFILE%" (
+    echo Failed: base Dockerfile not found: "%BASE_DOCKERFILE%"
+    exit /b 1
+)
+
+docker image inspect %BASE_IMAGE% >nul 2>&1
+if not errorlevel 1 exit /b 0
+
+echo [build] Base image %BASE_IMAGE% not found, creating it...
+docker build -f "%BASE_DOCKERFILE%" -t %BASE_IMAGE% "%WORKSPACE_DIR%"
+if errorlevel 1 (
+    echo Failed: could not create base image %BASE_IMAGE%.
+    exit /b 1
+)
+
+echo [build] Base image %BASE_IMAGE% created.
 exit /b 0
 
 :purge_cache
-rem Delete the repo-specific PlatformIO cache volume.
 echo [cache] Cleaning PlatformIO Docker volume: "%PIO_CACHE_VOLUME%"
 docker volume rm -f "%PIO_CACHE_VOLUME%" >nul
 if errorlevel 1 (

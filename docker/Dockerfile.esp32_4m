@@ -1,0 +1,5 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+LABEL moving_speaker.target="esp32_4m"
+ENV MOVING_SPEAKER_TARGET=esp32_4m
