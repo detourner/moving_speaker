@@ -2,9 +2,7 @@
 
 This folder contains a small GUI simulator used to control and monitor the Moving Speaker project from a PC. The simulator connects to the Arduino firmware over a serial link and provides controls to send setpoints and view motor status.
 
-![Main Form](img/moving_speaker_sim_main_form.png)
-
-This README explains how to create a Python virtual environment, install dependencies, and run the simulator on Windows, Linux and macOS. It also documents the command-line options supported by the simulator (`-p/--port` and `-l/--log`).
+This README explains how to create a Python virtual environment, install dependencies, and run the simulator on Windows, Linux and macOS. It also documents the command-line options supported by the simulator (`-p/--port`, `-l/--log` and `-s/--scenario`).
 
 Requirements
 - Python 3.8 or later
@@ -71,6 +69,31 @@ python moving_speaker_sim.py -p /dev/ttyUSB0
 python moving_speaker_sim.py -p /dev/tty.usbserial-FT123
 ```
 
+Run a movement scenario
+
+A scenario file contains one 14-field `esp32_4m` CSV command per line. Blank lines
+and lines beginning with `#` are ignored. Use `wait <seconds>` between commands
+to let the motors move before the next setpoint is sent:
+
+```text
+0,20,50,0,20,0,50,0,20,50,0,20,0,50
+wait 5
+0,20,50,180,20,0,50,0,20,50,180,20,0,50
+```
+
+The scenario runs in the GUI event loop, so serial monitoring and position updates
+continue while it is executing:
+
+```powershell
+python moving_speaker_sim.py -p COM4 -s scenario_symmetric.txt -l scenario.log
+```
+
+Generated scenarios:
+
+- `scenario_symmetric.txt` — identical B/D reference movements.
+- `scenario_reversals.txt` — repeated pan direction changes.
+- `scenario_speed_stress.txt` — conservative settings followed by higher speed.
+
 Enable logging to file
 
 You can log all sent and received serial frames (timestamped) by supplying the `-l` / `--log` option with a file path. The log file is opened in append mode.
@@ -101,7 +124,8 @@ Notes and troubleshooting
 Serial protocol (summary)
 - The simulator follows the Arduino firmware protocol documented in the project README. Key points:
   - Baud rate: 115200
-  - Send commands as a single CSV line (7 fields) terminated by `\n`.
+  - Send commands as a single CSV line terminated by `\n`: 7 fields for `avr_2m` or 14 fields for `esp32_4m`.
+  - Send `T` followed by `\n` when an explicit `S:` state confirmation is needed. The firmware no longer sends `S:` automatically after each command.
   - The simulator prints any serial frames that do not start with `P:` to the console and will log frames when `-l` is provided.
 
 Where to go next

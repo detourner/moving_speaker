@@ -1,0 +1,12 @@
+FROM python:3.14.7
+
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir platformio==6.1.19 intelhex
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]

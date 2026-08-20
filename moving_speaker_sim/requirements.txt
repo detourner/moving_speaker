@@ -1,3 +1,2 @@
-ttkbootstrap
-matplotlib
+PyQt6
 pyserial

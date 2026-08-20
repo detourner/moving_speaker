@@ -1,0 +1,5 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+LABEL moving_speaker.target="avr_2m"
+ENV MOVING_SPEAKER_TARGET=avr_2m
