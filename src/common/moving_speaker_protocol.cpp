@@ -39,7 +39,7 @@ void MovingSpeakerProtocol::process()
 
         if (length == sizeof(_buffer) - 1) {
             _serial.find('\n');
-            _serial.println("E:Invalid frame: line too long");
+            _serial.println("E: Invalid frame: line too long");
             return;
         }
 
@@ -62,7 +62,7 @@ void MovingSpeakerProtocol::process()
 void MovingSpeakerProtocol::sendInfoFrame()
 {
     _serial.println(_infoTitle);
-    _serial.print("I:");
+    _serial.print("I: ");
 
     for (uint8_t index = 0; index < _motorCount; ++index) {
         StepperCore& motor = *_motors[index].stepper;
@@ -87,7 +87,7 @@ void MovingSpeakerProtocol::sendInfoFrame()
 
 void MovingSpeakerProtocol::sendPositionFrame()
 {
-    _serial.print("P:");
+    _serial.print("P: ");
 
     for (uint8_t index = 0; index < _motorCount; ++index) {
         StepperState state;
@@ -115,7 +115,7 @@ void MovingSpeakerProtocol::processCommand(uint16_t length)
 {
     constexpr uint8_t maxMotorChannels = 4;
     if (_motorCount > maxMotorChannels) {
-        _serial.println("E:Invalid protocol configuration");
+        _serial.println("E: Invalid protocol configuration");
         return;
     }
 
@@ -129,7 +129,7 @@ void MovingSpeakerProtocol::processCommand(uint16_t length)
         expectedFields += _motors[index].modulo ? 4 : 3;
 
     if (commaCount != expectedFields - 1) {
-        _serial.println("E:Invalid frame: wrong number of fields");
+        _serial.println("E: Invalid frame: wrong number of fields");
         return;
     }
 
@@ -165,7 +165,7 @@ void MovingSpeakerProtocol::processCommand(uint16_t length)
 bool MovingSpeakerProtocol::parseDouble(char*& token, double& value)
 {
     if (!token) {
-        _serial.println("E:Invalid frame: invalid numeric field");
+        _serial.println("E: Invalid frame: invalid numeric field");
         return false;
     }
 
@@ -175,7 +175,7 @@ bool MovingSpeakerProtocol::parseDouble(char*& token, double& value)
     while (end && isspace((unsigned char)*end)) ++end;
 
     if (end == token || *end != '\0' || errno == ERANGE || !isfinite(value)) {
-        _serial.println("E:Invalid frame: invalid numeric field");
+        _serial.println("E: Invalid frame: invalid numeric field");
         return false;
     }
     return true;
@@ -184,7 +184,7 @@ bool MovingSpeakerProtocol::parseDouble(char*& token, double& value)
 bool MovingSpeakerProtocol::parseMode(char*& token, RotaryMode& mode)
 {
     if (!token) {
-        _serial.println("E:Invalid frame: invalid rotation mode");
+        _serial.println("E: Invalid frame: invalid rotation mode");
         return false;
     }
 
@@ -195,7 +195,7 @@ bool MovingSpeakerProtocol::parseMode(char*& token, RotaryMode& mode)
 
     if (end == token || *end != '\0' || errno == ERANGE ||
         parsedMode < ROT_SHORTEST || parsedMode > ROT_CCW) {
-        _serial.println("E:Invalid frame: invalid rotation mode");
+        _serial.println("E: Invalid frame: invalid rotation mode");
         return false;
     }
 

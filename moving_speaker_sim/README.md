@@ -125,7 +125,7 @@ Serial protocol (summary)
 - The simulator follows the Arduino firmware protocol documented in the project README. Key points:
   - Baud rate: 115200
   - Send commands as a single CSV line terminated by `\n`: 7 fields for `avr_2m` or 14 fields for `esp32_4m`.
-  - Send `T` followed by `\n` when an explicit `S:` state confirmation is needed. The firmware no longer sends `S:` automatically after each command.
+  - Send `T` followed by `\n` when an explicit `S: ` state confirmation is needed. The firmware no longer sends `S: ` automatically after each command.
   - The simulator prints any serial frames that do not start with `P:` to the console and will log frames when `-l` is provided.
 
 Where to go next

@@ -48,7 +48,7 @@ You can download demo/demo.mp4 video file
 1) Startup information frames
 - The board prints some information at startup:
 	- `I: Moving Speaker V2.1 by Détourner`
-	- `I:` followed by a line with 12 comma-separated values on AVR or 24 values on ESP32. The values describe the limits and ranges for each configured motor.
+	- `I: ` followed by a line with 12 comma-separated values on AVR or 24 values on ESP32. The values describe the limits and ranges for each configured motor.
 
 	Order of the values (six per motor, comma-separated):
 	- (1) motor A, min position in degree 
@@ -60,8 +60,9 @@ You can download demo/demo.mp4 video file
 	- (7) motor B, min position in degree
 	- (8) motor B, max position in degree
 	- (9) motor B, min speed in °/s
-	- (10) motor B, max speed in °/s
-	- (11) motor B, min acceleration in °/s^2
+	I: Moving Speaker V2.1 by Détourner
+	I: -90,90,0.1,20,1,100,0,359.99,0.1,20,1,100,-90,90,0.1,20,1,100,0,359.99,0.1,20,1,100
+	I: Ready
 	- (12) motor B, max acceleration in °/s^2
 	- the same six fields repeat for each additional motor
 
@@ -69,10 +70,10 @@ You can download demo/demo.mp4 video file
 	I:
 	-90,90,0.1,20,1,100,0,359.99,0.1,20,1,100,-90,90,0.1,20,1,100,0,359.99,0.1,20,1,100
 
-2) Periodic status frames (`P:`)
+2) Periodic status frames (`P: `)
 - Emitted approximately every 100 ms (controlled in the main loop).
 - Format:
-	P:isRunningA,positionA_deg,speedA_degPerSec,isRunningB,positionB_deg_modulo,speedB_degPerSec,isRunningC,positionC_deg,speedC_degPerSec,isRunningD,positionD_deg,speedD_degPerSec
+	P: isRunningA,positionA_deg,speedA_degPerSec,isRunningB,positionB_deg_modulo,speedB_degPerSec,isRunningC,positionC_deg,speedC_degPerSec,isRunningD,positionD_deg,speedD_degPerSec
 
 	Field details:
 	- `isRunningA`: `0` or `1` (motor A is moving)
@@ -89,26 +90,26 @@ You can download demo/demo.mp4 video file
 	- `speedD_degPerSec`: current speed in degrees/s
 
 	Example:
-	P:1,12.34,5.00,0,270.00,0.00,1,12.34,5.00,0,90.00,0.00
+	P: 1,12.34,5.00,0,270.00,0.00,1,12.34,5.00,0,90.00,0.00
 
-3) State confirmation frames (`S:`)
+3) State confirmation frames (`S: `)
 - The firmware does not send this frame automatically after a command. Send the request `T` followed by `\n` to obtain it:
 
 	T
 
 - The firmware then replies with:
-	S:isRunningA,targetA_deg,maxSpeedA_deg,accelA_degPerSec,isRunningB,targetB_deg,maxSpeedB_deg,accelB_degPerSec,isRunningC,targetC_deg,maxSpeedC_deg,accelC_degPerSec,isRunningD,targetD_deg,maxSpeedD_deg,accelD_degPerSec
+	S: isRunningA,targetA_deg,maxSpeedA_deg,accelA_degPerSec,isRunningB,targetB_deg,maxSpeedB_deg,accelB_degPerSec,isRunningC,targetC_deg,maxSpeedC_deg,accelC_degPerSec,isRunningD,targetD_deg,maxSpeedD_deg,accelD_degPerSec
 
 	Example:
-	S:1,45.00,17.00,50.00,0,90.00,17.00,50.00,1,45.00,17.00,50.00,0,90.00,17.00,50.00
+	S: 1,45.00,17.00,50.00,0,90.00,17.00,50.00,1,45.00,17.00,50.00,0,90.00,17.00,50.00
 
-4) Error frames (`E:`)
+4) Error frames (`E: `)
 - Format error (wrong number of fields):
-	E:Invalid frame: wrong number of fields
+	E: Invalid frame: wrong number of fields
 - Invalid numeric field:
-	E:Invalid frame: invalid numeric field
+	E: Invalid frame: invalid numeric field
 - Invalid rotation mode:
-	E:Invalid frame: invalid rotation mode
+	E: Invalid frame: invalid rotation mode
 
 ---
 **Command format (PC -> firmware)**
@@ -146,7 +147,7 @@ Notes:
 - All fields are ASCII decimal numbers; floating point values are accepted where relevant.
 - Numeric fields must contain a complete finite number. Values such as `abc`, `nan` or `inf` are rejected.
 - Rotation modes must be `0`, `1` or `2`.
-- The line must contain exactly 13 commas (14 fields). Otherwise the Arduino will return an `E:` error frame.
+- The line must contain exactly 13 commas (14 fields). Otherwise the Arduino will return an `E: ` error frame.
 
 Command example (terminated by `\n`):
 ```
@@ -158,7 +159,7 @@ This means:
 - Motor C target → 10.0° with vmax 150°/s and accel 200°/s²
 - Motor D target → 180.0° with vmax 120°/s, rotation mode `0` (shortest), accel 300°/s²
 
-After reception the Arduino applies the parameters and replies with an `S:` frame describing the applied state.
+After reception the Arduino applies the parameters and replies with an `S: ` frame describing the applied state.
 
 ---
 **Units and conversions**
@@ -265,8 +266,8 @@ python -c "import serial, time; s=serial.Serial('COM3',115200,timeout=1); time.s
 ---
 **Quick troubleshooting**
 - No response: check serial port and baud rate (115200).
-- `E:Invalid frame...`: verify the field count matches the selected target and the line ends with `\n`.
-- Unexpected values: check the ranges printed in the `I:` frame at startup.
+- `E: Invalid frame...`: verify the field count matches the selected target and the line ends with `\n`.
+- Unexpected values: check the ranges printed in the `I: ` frame at startup.
 
 ---
 **Key source files**
